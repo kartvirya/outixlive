@@ -1,98 +1,510 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { Header } from "@/components/header";
+import { PromoterCard } from "@/components/promoter-card";
+import { SearchBar } from "@/components/search-bar";
+import { AnimatedPressable } from "@/components/ui/animated-pressable";
+import { Button } from "@/components/ui/button";
+import { useBuyback } from "@/contexts/BuybackContext";
+import type { Notification, Promoter } from "@/data/mockData";
+import { notifications } from "@/data/mockData";
+import { getPromoters } from "@/lib/api";
+import {
+    distanceKm,
+    getBrowserLocation,
+    isValidLatLng,
+    type LatLng,
+} from "@/lib/utils";
+import { useRouter } from "expo-router";
+import {
+    Bell,
+    ChevronDown,
+    ChevronUp,
+    MapPin,
+    Navigation,
+    Search,
+} from "lucide-react-native";
+import React, { useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hasLocation, setHasLocation] = useState(false);
+  const [userLocation, setUserLocation] = useState<LatLng | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [activeTab, setActiveTab] = useState<"all" | "subscribed">("all");
+  const [promotersList, setPromotersList] = useState<Promoter[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isHeaderExpanded, setIsHeaderExpanded] = useState(true);
+  const { offers } = useBuyback();
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  // Calculate unread notification count
+  const unreadCount = notifications.filter(
+    (n: Notification) => !n.isRead,
+  ).length;
+  const activeBuybackOffers = offers.filter((o) => {
+    if (o.status === "pending") return true;
+    return Date.now() - o.createdAt.getTime() < 24 * 60 * 60 * 1000;
+  });
+  const totalUnread =
+    unreadCount +
+    activeBuybackOffers.filter((o) => o.status === "pending").length;
+
+  useEffect(() => {
+    loadPromoters();
+  }, []);
+
+  const loadPromoters = async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      setError(null);
+
+      const data = await getPromoters();
+
+      // Transform API response to match Promoter interface
+      // API likely returns data in 'msg' property (similar to events)
+      const promoters = Array.isArray(data)
+        ? data
+        : data?.msg || data?.promoters || data?.data || [];
+
+      const transformedPromoters = promoters
+        .filter((p: any) => p) // Filter out null/undefined
+        .map((p: any) => {
+          // Keep raw isSubscribed value (0 or 1) - don't convert to boolean
+          // Convert string "0"/"1" to number 0/1
+          let isSubscribed = p.isSubscribed;
+          if (typeof isSubscribed === "string") {
+            isSubscribed = isSubscribed === "1" ? 1 : 0;
+          } else if (typeof isSubscribed === "number") {
+            isSubscribed = isSubscribed > 0 ? 1 : 0;
+          } else {
+            isSubscribed = 0; // default to 0 for undefined/null
+          }
+
+          const transformed = {
+            id:
+              p.id ||
+              p._id ||
+              String(p.promoterId || Math.random().toString(36)),
+            name: p.name || p.promoterName || "Untitled Venue",
+            logo:
+              p.logo ||
+              p.logoUrl ||
+              p.venuelogo ||
+              "https://via.placeholder.com/200",
+            coverImage:
+              p.coverImage ||
+              p.coverImageUrl ||
+              "https://via.placeholder.com/800",
+            eventCount: p.eventCount || p.eventsCount || 0,
+            isSubscribed: isSubscribed,
+            brandColor: p.brandColor || "0 84% 60%",
+            website: p.website || p.websiteUrl || "",
+            latitude: parseFloat(p.latitude || p.lat || "0"),
+            longitude: parseFloat(p.longitude || p.lng || "0"),
+            address: p.address || p.location || "",
+          };
+          return transformed;
+        });
+
+      setPromotersList(transformedPromoters);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load promoters");
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    loadPromoters(true);
+  };
+
+  // Filter by search query
+  const filteredPromoters = promotersList.filter((p) => {
+    const matchesSearch =
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.address.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
+  });
+
+  const totalCount = filteredPromoters.length;
+  const subscribedCount = filteredPromoters.filter(
+    (p) => p.isSubscribed === 1,
+  ).length;
+
+  const tabFilteredPromoters =
+    activeTab === "all"
+      ? filteredPromoters
+      : filteredPromoters.filter((p) => p.isSubscribed === 1);
+
+  const sortedPromoters = (() => {
+    if (!hasLocation || !isValidLatLng(userLocation))
+      return tabFilteredPromoters;
+    const origin = userLocation;
+    return [...tabFilteredPromoters].sort((a, b) => {
+      const aLoc = { latitude: a.latitude, longitude: a.longitude };
+      const bLoc = { latitude: b.latitude, longitude: b.longitude };
+      const aValid = isValidLatLng(aLoc);
+      const bValid = isValidLatLng(bLoc);
+      if (!aValid && !bValid) return 0;
+      if (!aValid) return 1;
+      if (!bValid) return -1;
+      return distanceKm(origin, aLoc) - distanceKm(origin, bLoc);
+    });
+  })();
+
+  const requestLocationSort = async () => {
+    try {
+      setIsLocating(true);
+      const loc = await getBrowserLocation();
+      setUserLocation(loc);
+      setHasLocation(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to get location";
+      Alert.alert("Location unavailable", msg);
+      setHasLocation(false);
+      setUserLocation(null);
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <Header notificationCount={totalUnread} />
+      <View style={styles.content}>
+        {/* Single Collapsible Section */}
+        <View style={styles.collapsibleSection}>
+          <AnimatedPressable
+            onPress={() => setIsHeaderExpanded(!isHeaderExpanded)}
+            animationType="press"
+            style={styles.collapsibleHeader}
+          >
+            <View style={styles.heroCompact}>
+              <Text style={styles.heroTitleCompact}>Find Your Venue</Text>
+              {!isHeaderExpanded && (
+                <Text style={styles.heroSubtitleCompact}>
+                  {hasLocation
+                    ? "Sorted by distance"
+                    : "Browse venues near you"}
+                </Text>
+              )}
+            </View>
+            {isHeaderExpanded ? (
+              <ChevronUp size={24} color="#22c55e" />
+            ) : (
+              <ChevronDown size={24} color="#737373" />
+            )}
+          </AnimatedPressable>
+
+          {/* Expandable Content */}
+          {isHeaderExpanded && (
+            <View style={styles.expandableContent}>
+              <View style={styles.hero}>
+                <Text style={styles.heroSubtitle}>Browse venues near you</Text>
+              </View>
+
+              {!hasLocation && (
+                <Button
+                  variant="outline"
+                  onPress={requestLocationSort}
+                  style={styles.locationButton}
+                  disabled={isLocating}
+                >
+                  <Navigation
+                    size={16}
+                    color="#22c55e"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={styles.buttonText}>
+                    {isLocating
+                      ? "Getting your location..."
+                      : "Use my location to sort by distance"}
+                  </Text>
+                </Button>
+              )}
+
+              {hasLocation && (
+                <View style={styles.locationStatus}>
+                  <MapPin
+                    size={16}
+                    color="#22c55e"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={styles.locationStatusText}>
+                    Sorted by distance from you
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.searchContainer}>
+                <SearchBar
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Search venues or locations..."
+                />
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.filterContainer}>
+          <View style={{ flexDirection: "row" }}>
+            <Button
+              variant="ghost"
+              style={[
+                styles.filterButton,
+                activeTab === "all" && styles.filterButtonActive,
+              ]}
+              onPress={() => setActiveTab("all")}
+            >
+              <Text
+                style={[
+                  styles.filterText,
+                  activeTab === "all" && styles.filterTextActive,
+                ]}
+              >
+                All ({totalCount})
+              </Text>
+            </Button>
+
+            <Button
+              variant="ghost"
+              style={[
+                styles.filterButton,
+                activeTab === "subscribed" && styles.filterButtonActive,
+              ]}
+              onPress={() => setActiveTab("subscribed")}
+            >
+              <Bell
+                size={14}
+                color={activeTab === "subscribed" ? "#22c55e" : "#737373"}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.filterText,
+                  activeTab === "subscribed" && styles.filterTextActive,
+                ]}
+              >
+                Subscribed ({subscribedCount})
+              </Text>
+            </Button>
+          </View>
+        </View>
+
+        <ScrollView
+          style={styles.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={onRefresh}
+              tintColor="#22c55e"
+              colors={["#22c55e"]}
+            />
+          }
+        >
+          {isLoading ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color="#22c55e" />
+              <Text style={styles.emptyTitle}>Loading venues...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>Error loading venues</Text>
+              <Text style={styles.emptySubtitle}>{error}</Text>
+              <Button onPress={loadPromoters} style={{ marginTop: 16 }}>
+                Retry
+              </Button>
+            </View>
+          ) : promotersList.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Search size={40} color="#737373" />
+              <Text style={styles.emptyTitle}>No venues found</Text>
+              <Text style={styles.emptySubtitle}>
+                No venues available at this time
+              </Text>
+            </View>
+          ) : sortedPromoters.length > 0 ? (
+            sortedPromoters.map((promoter) => (
+              <PromoterCard
+                key={promoter.id}
+                id={promoter.id}
+                name={promoter.name}
+                logo={promoter.logo}
+                coverImage={promoter.coverImage}
+                eventCount={promoter.eventCount}
+                brandColor={promoter.brandColor}
+                website={promoter.website}
+                latitude={promoter.latitude}
+                longitude={promoter.longitude}
+                address={promoter.address}
+                isSubscribed={promoter.isSubscribed}
+                onPress={() =>
+                  router.push({
+                    pathname: `/promoter/${promoter.id}`,
+                    params: {
+                      promoterData: JSON.stringify(promoter),
+                    },
+                  })
+                }
+              />
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Search size={40} color="#737373" />
+              <Text style={styles.emptyTitle}>No venues found</Text>
+              <Text style={styles.emptySubtitle}>
+                Try a different search term
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: "#0a0a0a",
   },
-  stepContainer: {
-    gap: 8,
+  content: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  collapsibleSection: {
+    backgroundColor: "#18181b",
+    borderRadius: 12,
+    marginTop: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#27272a",
+    overflow: "hidden",
+  },
+  collapsibleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+  },
+  heroCompact: {
+    flex: 1,
+  },
+  heroTitleCompact: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#fafafa",
+    marginBottom: 2,
+  },
+  heroSubtitleCompact: {
+    fontSize: 12,
+    color: "#737373",
+  },
+  expandableContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  hero: {
+    alignItems: "center",
+    paddingBottom: 16,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#fafafa",
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  heroSubtitle: {
+    fontSize: 14,
+    color: "#737373",
+  },
+  locationButton: {
+    width: "100%",
+    height: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  buttonText: {
+    color: "#22c55e",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  locationStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    marginBottom: 16,
+  },
+  locationStatusText: {
+    fontSize: 14,
+    color: "#22c55e",
+  },
+  searchContainer: {
+    marginBottom: 16,
+  },
+  filterContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  filterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginHorizontal: 8,
+  },
+  filterButtonActive: {
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
+  },
+  filterText: {
+    fontSize: 14,
+    color: "#737373",
+  },
+  filterTextActive: {
+    color: "#22c55e",
+    fontWeight: "600",
+  },
+  list: {
+    flex: 1,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#737373",
+    marginTop: 12,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#737373",
+    marginTop: 4,
   },
 });

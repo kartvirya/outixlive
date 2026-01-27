@@ -10,7 +10,16 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Set up environment variables
+
+   Create a `.env` file in the root directory:
+   ```bash
+   EXPO_PUBLIC_API_URL=https://api.outix.co/api/v1
+   ```
+   
+   **Note**: The `.env` file is gitignored. Update `app.config.js` if you need to change the default API URL.
+
+3. Start the app
 
    ```bash
    npx expo start

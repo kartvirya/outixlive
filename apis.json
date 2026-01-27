@@ -1,0 +1,423 @@
+{
+  "info": {
+    "_postman_id": "93f5e2e4-8d4d-46a6-b562-4b0c17ced61f",
+    "name": "Alerts",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "51619417",
+    "_collection_link": "https://go.postman.co/collection/4789004-93f5e2e4-8d4d-46a6-b562-4b0c17ced61f?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "email",
+              "value": "",
+              "type": "text",
+              "uuid": "894f5b1d-e0e8-42ec-809c-2c02acee3f61"
+            },
+            {
+              "key": "password",
+              "value": "",
+              "type": "text",
+              "uuid": "6d47bc8d-e3ae-4753-915f-e29aab97bc29"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ],
+          "query": [
+            {
+              "key": "email",
+              "value": "outix@thebend.co",
+              "type": "text",
+              "disabled": true
+            },
+            {
+              "key": "password",
+              "value": "Etis",
+              "type": "text",
+              "disabled": true
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "logout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "email",
+              "value": "",
+              "type": "text",
+              "uuid": "894f5b1d-e0e8-42ec-809c-2c02acee3f61"
+            },
+            {
+              "key": "password",
+              "value": "",
+              "type": "text",
+              "uuid": "6d47bc8d-e3ae-4753-915f-e29aab97bc29"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/logout",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "logout"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "validatetoken",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "email",
+              "value": "outix@thebend.co",
+              "type": "text",
+              "uuid": "894f5b1d-e0e8-42ec-809c-2c02acee3f61"
+            },
+            {
+              "key": "password",
+              "value": "Outix98510",
+              "type": "text",
+              "uuid": "6d47bc8d-e3ae-4753-915f-e29aab97bc29"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/validatetoken/{{token}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "validatetoken",
+            "{{token}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "registertoken",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "email",
+              "value": "outix@thebend.co",
+              "type": "text",
+              "uuid": "894f5b1d-e0e8-42ec-809c-2c02acee3f61"
+            },
+            {
+              "key": "password",
+              "value": "Outix98510",
+              "type": "text",
+              "uuid": "6d47bc8d-e3ae-4753-915f-e29aab97bc29"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/registertoken/{{deviceToken}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registertoken",
+            "{{deviceToken}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "promoters",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "DeviceToken",
+            "value": "{{deviceToken}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "email",
+              "value": "outix@thebend.co",
+              "type": "text",
+              "uuid": "894f5b1d-e0e8-42ec-809c-2c02acee3f61"
+            },
+            {
+              "key": "password",
+              "value": "Outix98510",
+              "type": "text",
+              "uuid": "6d47bc8d-e3ae-4753-915f-e29aab97bc29"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/promoters",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "promoters"
+          ]
+        },
+        "description": "**DeviceToken** is optional"
+      },
+      "response": []
+    },
+    {
+      "name": "promoterssubscribe",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "DeviceToken",
+            "value": "{{deviceToken}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "email",
+              "value": "outix@thebend.co",
+              "type": "text",
+              "uuid": "894f5b1d-e0e8-42ec-809c-2c02acee3f61"
+            },
+            {
+              "key": "password",
+              "value": "Outix98510",
+              "type": "text",
+              "uuid": "6d47bc8d-e3ae-4753-915f-e29aab97bc29"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/promoters/subscribe/MTI1NjAyNDY4ODY0MA==",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "promoters",
+            "subscribe",
+            "MTI1NjAyNDY4ODY0MA=="
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "listevents",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "DeviceToken",
+            "value": "{{deviceToken}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "email",
+              "value": "outix@thebend.co",
+              "type": "text",
+              "uuid": "894f5b1d-e0e8-42ec-809c-2c02acee3f61"
+            },
+            {
+              "key": "password",
+              "value": "Outix98510",
+              "type": "text",
+              "uuid": "6d47bc8d-e3ae-4753-915f-e29aab97bc29"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/listevents",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "listevents"
+          ]
+        },
+        "description": "**DeviceToken** is optional"
+      },
+      "response": []
+    },
+    {
+      "name": "listeventsubscribe",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "DeviceToken",
+            "value": "622318271roUcEjZ4279487",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "unsubscribe",
+              "value": "1",
+              "type": "text",
+              "uuid": "037db56e-5860-4042-8e11-876fe2445e83",
+              "disabled": true
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/listevents/subscribe/NTYyMjkwMTIyMjQ=",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "listevents",
+            "subscribe",
+            "NTYyMjkwMTIyMjQ="
+          ],
+          "query": [
+            {
+              "key": "",
+              "value": "",
+              "type": "text",
+              "disabled": true
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "promotersdetails",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "email",
+              "value": "outix@thebend.co",
+              "type": "text",
+              "uuid": "894f5b1d-e0e8-42ec-809c-2c02acee3f61"
+            },
+            {
+              "key": "password",
+              "value": "Outix98510",
+              "type": "text",
+              "uuid": "6d47bc8d-e3ae-4753-915f-e29aab97bc29"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/promoters/MjY2MjExNTExNzY5Ng==",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "promoters",
+            "MjY2MjExNTExNzY5Ng=="
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": ""
+    }
+  ]
+}

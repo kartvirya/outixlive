@@ -1,10 +1,9 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
-
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Tabs } from "expo-router";
+import { Bell, Calendar, Home, User } from "lucide-react-native";
+import React from "react";
+import "../../global.css";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -12,22 +11,60 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: Colors[colorScheme ?? "dark"].tint,
+        tabBarInactiveTintColor: Colors[colorScheme ?? "dark"].tabIconDefault,
         headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+        tabBarStyle: {
+          backgroundColor: "rgba(10, 10, 10, 0.95)",
+          borderTopWidth: 1,
+          borderTopColor: "rgba(255, 255, 255, 0.1)",
+          paddingBottom: 28,
+          paddingTop: 8,
+          height: 84,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: "500",
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: "Venues",
+          tabBarIcon: ({ color, size }) => (
+            <Home size={size || 20} color={color} />
+          ),
         }}
       />
+
       <Tabs.Screen
-        name="explore"
+        name="events"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: "Events",
+          tabBarIcon: ({ color, size }) => (
+            <Calendar size={size || 20} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="alerts"
+        options={{
+          title: "Alerts",
+          tabBarIcon: ({ color, size }) => (
+            <Bell size={size || 20} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color, size }) => (
+            <User size={size || 20} color={color} />
+          ),
         }}
       />
     </Tabs>
