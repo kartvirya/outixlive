@@ -1,6 +1,6 @@
 import { BASE_URL } from "@/constants/config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getStoredDeviceToken } from "./iosDeviceTokenManager";
+import { getDeviceToken as getDeviceTokenFromStorage } from "./deviceToken";
 
 const TOKEN_STORAGE_KEY = "outix_token";
 const SESSION_COOKIE_KEY = "outix_session_cookie";
@@ -176,10 +176,12 @@ export const getAuthToken = async (): Promise<string | null> => {
 /**
  * Get the stored device token
  * Returns the native iOS APNs device token (64-char hex string)
+ * Uses the same token from deviceToken.ts (stored in AsyncStorage as 'APNsDeviceToken')
  */
 export const getDeviceToken = async (): Promise<string | null> => {
   try {
-    const token = await getStoredDeviceToken();
+    // Use the same device token from deviceToken.ts (iOS APNs token from Apple)
+    const token = await getDeviceTokenFromStorage();
     return token;
   } catch (error) {
     console.error("[API] Error getting device token:", error);

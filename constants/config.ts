@@ -12,15 +12,29 @@ const ENV =
 
 const environments = {
   development: {
-    BASE_URL: "http://localhost:3000/api",
-    PUSH_API_BASE_URL: "http://localhost:3000/api",
+    BASE_URL: "http://localhost:3000/apis",
+    PUSH_API_BASE_URL: "http://localhost:3000/apis",
     DEBUG: true,
   },
   production: {
     BASE_URL: "https://outix.co/apis",
-    PUSH_API_BASE_URL: "https://outix.co/apis", // Replace with your production push API
+    PUSH_API_BASE_URL: "https://outix.co/apis", // Replace with your production  push API
     DEBUG: false,
   },
+};
+
+/**
+ * Normalize base URL to ensure /apis is used instead of /api for outix.co
+ */
+const normalizeBaseUrl = (url: string): string => {
+  if (url.includes("outix.co")) {
+    // Replace /api or /api/ with /apis (remove trailing slash if present)
+    const trimmed = url.replace(/\/+$/, ""); // Remove trailing slashes
+    if (trimmed.endsWith("/api")) {
+      return trimmed.replace("/api", "/apis");
+    }
+  }
+  return url;
 };
 
 /**
@@ -36,16 +50,16 @@ const getBaseUrl = (): string => {
   const baseUrl = Constants.expoConfig?.extra?.baseUrl;
 
   if (baseUrl && typeof baseUrl === "string") {
-    return baseUrl;
+    return normalizeBaseUrl(baseUrl);
   }
 
   // Fallback to process.env (works in some setups)
   if (typeof process !== "undefined") {
     if (process.env?.EXPO_PUBLIC_BASE_URL) {
-      return process.env.EXPO_PUBLIC_BASE_URL;
+      return normalizeBaseUrl(process.env.EXPO_PUBLIC_BASE_URL);
     }
     if (process.env?.BASE_URL) {
-      return process.env.BASE_URL;
+      return normalizeBaseUrl(process.env.BASE_URL);
     }
   }
 

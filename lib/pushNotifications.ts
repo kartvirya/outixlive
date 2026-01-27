@@ -22,10 +22,10 @@ import {
   validateAndFormatSNSToken,
 } from "./awsSnsTokenUtils";
 import {
-  getStoredDeviceToken,
   startListeningForDeviceToken,
   storeDeviceToken,
 } from "./iosDeviceTokenManager";
+import { getDeviceToken } from "./deviceToken";
 
 console.log(
   "🚀 [PUSH-NOTIFICATIONS] Module loaded - Push notification service initialized",
@@ -746,11 +746,11 @@ export async function getDeviceTokenWithIOSIntegration() {
   console.log("[iOS TOKEN] 🔍 Getting device token with iOS integration...");
 
   if (Platform.OS === "ios") {
-    // Try to get stored token from iOS first
+    // Try to get stored token from iOS first (same token used everywhere)
     console.log("[iOS TOKEN] 📱 Checking for stored iOS native token...");
-    const storedToken = await getStoredDeviceToken();
+    try {
+      const storedToken = await getDeviceToken();
 
-    if (storedToken) {
       console.log(
         `[iOS TOKEN] ✅ Found stored iOS token: ${storedToken.substring(0, 20)}...`,
       );
@@ -761,11 +761,11 @@ export async function getDeviceTokenWithIOSIntegration() {
         isValid: true,
         warnings: [],
       };
+    } catch (error) {
+      console.log(
+        "[iOS TOKEN] ⚠️ No stored iOS token found, falling back to Expo method...",
+      );
     }
-
-    console.log(
-      "[iOS TOKEN] ⚠️ No stored iOS token found, falling back to Expo method...",
-    );
   }
 
   // Fall back to regular Expo method
@@ -1363,10 +1363,14 @@ export async function debugPushTokenSetup() {
       console.log(`   ⚠️ Warnings: ${nativeToken.warnings.join(", ")}`);
     }
 
-    // 3. Get device identifier
+    // 3. Get device identifier (same token used everywhere)
     console.log("\n3. Device Identifier:");
-    const deviceId = await getStoredDeviceToken();
-    console.log(`   ✅ Device ID (iOS Native Token): ${deviceId?.substring(0, 20)}...`);
+    try {
+      const deviceId = await getDeviceToken();
+      console.log(`   ✅ Device ID (iOS Native Token): ${deviceId.substring(0, 20)}...`);
+    } catch (error) {
+      console.log(`   ⚠️ Device ID not available: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
 
     // 4. Test token registration
     console.log("\n4. Token Registration Test:");

@@ -31,18 +31,20 @@ export const useAuth = () => {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        // Get iOS native APNs device token
-        const { getStoredDeviceToken } = await import('@/lib/iosDeviceTokenManager');
-        const deviceToken = await getStoredDeviceToken();
-        
-        // Register token with server if available (works without auth)
-        if (deviceToken) {
+        // Get iOS native APNs device token (same token used everywhere)
+        try {
+          const { getDeviceToken } = await import('@/lib/deviceToken');
+          const deviceToken = await getDeviceToken();
+          
+          // Register token with server (works without auth)
           try {
             const { registerToken } = await import('@/lib/api');
             await registerToken(deviceToken);
           } catch (error) {
             // Don't block app initialization if token registration fails
           }
+        } catch (error) {
+          // Device token not available yet - will be registered when iOS provides it
         }
 
         const savedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);

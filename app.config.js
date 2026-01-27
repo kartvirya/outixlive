@@ -74,7 +74,7 @@ export default {
       baseUrl:
         process.env.EXPO_PUBLIC_BASE_URL ||
         process.env.BASE_URL ||
-        "https://outix.co/api",
+        "https://outix.co/apis",
       // AWS SNS Configuration
       aws: {
         region: "eu-north-1",

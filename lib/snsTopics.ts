@@ -6,7 +6,7 @@
  */
 
 import { BASE_URL } from "@/constants/config";
-import { getStoredDeviceToken } from "./iosDeviceTokenManager";
+import { getDeviceToken } from "./deviceToken";
 
 /**
  * SNS Topic configuration
@@ -31,11 +31,7 @@ export async function subscribeToTopic(topicArn: string): Promise<{
   error?: string;
 }> {
   try {
-    const deviceToken = await getStoredDeviceToken();
-    
-    if (!deviceToken) {
-      throw new Error("No iOS device token available");
-    }
+    const deviceToken = await getDeviceToken();
 
     const response = await fetch(`${BASE_URL}/subscribe-topic`, {
       method: "POST",
@@ -72,11 +68,7 @@ export async function unsubscribeFromTopic(topicArn: string): Promise<{
   error?: string;
 }> {
   try {
-    const deviceToken = await getStoredDeviceToken();
-    
-    if (!deviceToken) {
-      throw new Error("No iOS device token available");
-    }
+    const deviceToken = await getDeviceToken();
 
     const response = await fetch(`${BASE_URL}/unsubscribe-topic`, {
       method: "POST",
