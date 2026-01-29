@@ -8,30 +8,31 @@ import { useBuyback } from "@/contexts/BuybackContext";
 import type { Notification, Promoter } from "@/data/mockData";
 import { getMyAlerts, getPromoters } from "@/lib/api";
 import {
-  distanceKm,
-  getBrowserLocation,
-  isValidLatLng,
-  type LatLng,
+    distanceKm,
+    getBrowserLocation,
+    isValidLatLng,
+    type LatLng,
 } from "@/lib/utils";
 import { useRouter } from "expo-router";
 import {
-  Bell,
-  ChevronDown,
-  ChevronUp,
-  MapPin,
-  Navigation,
-  Search,
+    Bell,
+    ChevronDown,
+    ChevronUp,
+    MapPin,
+    Navigation,
+    Search,
 } from "lucide-react-native";
 import { MotiView } from "moti";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -233,10 +234,43 @@ export default function HomeScreen() {
     }
   };
 
+  // TEST BUTTON: Show notification popup
+  const testNotificationPopup = () => {
+    console.log("[TEST] 🧪 Testing notification popup...");
+    // Call the global handler if available
+    if ((global as any).handleNotificationData) {
+      (global as any).handleNotificationData({
+        NotificationID: "Mjg4NDQ3NTMwMjQ=",
+        notificationId: "Mjg4NDQ3NTMwMjQ=",
+      });
+    } else {
+      Alert.alert(
+        "Error",
+        "handleNotificationData not available. Check console.",
+      );
+      console.error("[TEST] ❌ handleNotificationData not available");
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Header />
       <View style={styles.content}>
+        {/* TEST BUTTON - Remove this in production */}
+        <TouchableOpacity
+          style={{
+            backgroundColor: "#22c55e",
+            padding: 16,
+            borderRadius: 12,
+            margin: 16,
+            alignItems: "center",
+          }}
+          onPress={testNotificationPopup}
+        >
+          <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>
+            🧪 TEST NOTIFICATION POPUP
+          </Text>
+        </TouchableOpacity>
         {/* Single Collapsible Section */}
         <View style={styles.collapsibleSection}>
           <AnimatedPressable
