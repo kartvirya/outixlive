@@ -11,13 +11,26 @@ import { verifyConfiguration } from "@/lib/verifyConfig";
 import BottomSheetLib from "@gorhom/bottom-sheet";
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
-import { Stack } from "expo-router";
+import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
 import "../global.css";
+
+// CRITICAL: Configure notification handler BEFORE anything else
+// This MUST be called at module level, not inside a component
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -37,6 +50,10 @@ const customDarkTheme = {
 };
 
 export default function RootLayout() {
+  // Use segments to detect when navigation is ready
+  const segments = useSegments();
+  const [isNavigationReady, setIsNavigationReady] = useState(false);
+
   // Initialize push notifications
   const { nativePushToken, devicePushToken, notification, error } =
     usePushNotifications();
@@ -55,6 +72,9 @@ export default function RootLayout() {
 
   // Track processed notification IDs to prevent duplicate handling
   const processedNotificationIds = useRef<Set<string>>(new Set());
+
+  // Track if we're ready to show notifications (navigation + bottom sheet ready)
+  const [isReadyForNotifications, setIsReadyForNotifications] = useState(false);
 
   // Extract notification ID from data (supports multiple field names)
   const extractNotificationId = useCallback((data: any): string | null => {
@@ -118,19 +138,68 @@ export default function RootLayout() {
     return null;
   }, []);
 
-  // Helper function to open bottom sheet with retries
+  // Helper function to wait for navigation to be ready
+  const waitForNavigationReady = useCallback(
+    (maxWait = 5000): Promise<boolean> => {
+      return new Promise((resolve) => {
+        if (isNavigationReady && segments.length > 0) {
+          resolve(true);
+          return;
+        }
+
+        let attempts = 0;
+        const maxAttempts = maxWait / 100;
+        const checkInterval = setInterval(() => {
+          attempts++;
+          if (
+            (isNavigationReady && segments.length > 0) ||
+            attempts >= maxAttempts
+          ) {
+            clearInterval(checkInterval);
+            resolve(isNavigationReady && segments.length > 0);
+          }
+        }, 100);
+      });
+    },
+    [isNavigationReady, segments],
+  );
+
+  // Helper function to open bottom sheet with retries - PRODUCTION READY
   const openNotificationSheet = useCallback(
-    (notificationId: string, retryCount = 0) => {
-      const maxRetries = 3;
-      const delay = retryCount === 0 ? 500 : 1000;
+    async (notificationId: string, retryCount = 0) => {
+      const maxRetries = 5;
+      const baseDelay = 300;
+      const delay = retryCount === 0 ? baseDelay : baseDelay * (retryCount + 1);
+
+      // Wait for navigation to be ready first
+      if (retryCount === 0) {
+        const navReady = await waitForNavigationReady();
+        if (!navReady) {
+          console.warn(
+            "[NOTIFICATION] ⚠️ Navigation not ready, but proceeding anyway...",
+          );
+        }
+      }
 
       setTimeout(() => {
         console.log(
           `[NOTIFICATION] 🔼 Attempting to open bottom sheet (attempt ${retryCount + 1}/${maxRetries + 1})...`,
         );
+        console.log(
+          `[NOTIFICATION] 📊 Navigation ready: ${isNavigationReady}, Segments: ${segments.length}`,
+        );
+
         if (notificationSheetRef.current) {
           try {
-            notificationSheetRef.current.snapToIndex(2);
+            // Ensure we're on the main thread
+            if (Platform.OS === "ios") {
+              // iOS sometimes needs a small delay
+              setTimeout(() => {
+                notificationSheetRef.current?.snapToIndex(2);
+              }, 50);
+            } else {
+              notificationSheetRef.current.snapToIndex(2);
+            }
             console.log("[NOTIFICATION] ✅ Bottom sheet opened successfully!");
           } catch (error) {
             console.error(
@@ -140,6 +209,10 @@ export default function RootLayout() {
             if (retryCount < maxRetries) {
               console.log(`[NOTIFICATION] 🔄 Retrying in ${delay}ms...`);
               openNotificationSheet(notificationId, retryCount + 1);
+            } else {
+              console.error(
+                "[NOTIFICATION] ❌ Failed to open bottom sheet after all retries!",
+              );
             }
           }
         } else {
@@ -157,7 +230,7 @@ export default function RootLayout() {
         }
       }, delay);
     },
-    [],
+    [waitForNavigationReady, isNavigationReady, segments],
   );
 
   // Handle notification data extraction and opening bottom sheet
@@ -299,6 +372,20 @@ export default function RootLayout() {
     [extractNotificationId, openNotificationSheet],
   );
 
+  // Track navigation ready state - when segments are available, navigation is ready
+  useEffect(() => {
+    if (segments.length > 0 && !isNavigationReady) {
+      setIsNavigationReady(true);
+      // Add small delay to ensure everything is mounted
+      setTimeout(() => {
+        setIsReadyForNotifications(true);
+        console.log(
+          "[NOTIFICATION] ✅ Navigation is ready, ready for notifications",
+        );
+      }, 500);
+    }
+  }, [segments, isNavigationReady]);
+
   useEffect(() => {
     // Verify configuration on app start (only in development)
     if (__DEV__) {
@@ -314,51 +401,73 @@ export default function RootLayout() {
 
   // Check for notification that opened the app (when app was killed)
   // This handles the case when app is completely closed and user taps notification
+  // CRITICAL: Wait for navigation to be ready before processing
   useEffect(() => {
-    if (!hasCheckedLastResponse) {
+    if (!hasCheckedLastResponse && isReadyForNotifications) {
       console.log(
         "[NOTIFICATION] 🔍 Checking for last notification response (app was closed)...",
       );
+      console.log(
+        `[NOTIFICATION] 📊 Ready state - Navigation: ${isNavigationReady}, Segments: ${segments.length}`,
+      );
 
-      // Add a small delay to ensure the app is fully mounted
-      const checkTimer = setTimeout(() => {
-        Notifications.getLastNotificationResponseAsync()
-          .then((response) => {
-            if (response) {
-              console.log(
-                "[NOTIFICATION] 📬 Found last notification response!",
-              );
-              console.log(
-                "[NOTIFICATION] 📦 Response:",
-                JSON.stringify(response, null, 2),
-              );
+      // Wait for navigation to be ready, then check for notification
+      const checkNotification = async () => {
+        // Wait up to 2 seconds for navigation to be ready
+        const navReady = await waitForNavigationReady(2000);
+        if (!navReady) {
+          console.warn(
+            "[NOTIFICATION] ⚠️ Navigation not ready after wait, proceeding anyway...",
+          );
+        }
 
-              const data = response.notification.request.content.data;
-              console.log(
-                "[NOTIFICATION] 📦 Data:",
-                JSON.stringify(data, null, 2),
-              );
-
-              handleNotificationData(data, "app-closed");
-            } else {
-              console.log(
-                "[NOTIFICATION] ℹ️ No last notification response found",
-              );
-            }
-            setHasCheckedLastResponse(true);
-          })
-          .catch((err) => {
-            console.error(
-              "[NOTIFICATION] ❌ Error checking last response:",
-              err,
+        try {
+          const response =
+            await Notifications.getLastNotificationResponseAsync();
+          if (response) {
+            console.log("[NOTIFICATION] 📬 Found last notification response!");
+            console.log(
+              "[NOTIFICATION] 📦 Response:",
+              JSON.stringify(response, null, 2),
             );
-            setHasCheckedLastResponse(true);
-          });
-      }, 300); // Small delay to ensure app is ready
+
+            const data = response.notification.request.content.data;
+            console.log(
+              "[NOTIFICATION] 📦 Data:",
+              JSON.stringify(data, null, 2),
+            );
+
+            // Small delay to ensure UI is fully rendered
+            setTimeout(() => {
+              handleNotificationData(data, "app-closed");
+            }, 500);
+          } else {
+            console.log(
+              "[NOTIFICATION] ℹ️ No last notification response found",
+            );
+          }
+          setHasCheckedLastResponse(true);
+        } catch (err) {
+          console.error("[NOTIFICATION] ❌ Error checking last response:", err);
+          setHasCheckedLastResponse(true);
+        }
+      };
+
+      // Start checking after a small delay to ensure app is mounted
+      const checkTimer = setTimeout(() => {
+        checkNotification();
+      }, 300);
 
       return () => clearTimeout(checkTimer);
     }
-  }, [hasCheckedLastResponse, handleNotificationData]);
+  }, [
+    hasCheckedLastResponse,
+    isReadyForNotifications,
+    isNavigationReady,
+    segments,
+    handleNotificationData,
+    waitForNavigationReady,
+  ]);
 
   useEffect(() => {
     if (nativePushToken) {
@@ -377,10 +486,11 @@ export default function RootLayout() {
   }, [nativePushToken, devicePushToken, error]);
 
   // Handle notification from usePushNotifications hook (for foreground/background taps)
+  // This listener fires when app is already running (foreground or background)
   useEffect(() => {
-    if (notification) {
+    if (notification && isReadyForNotifications) {
       console.log(
-        "[NOTIFICATION] 🔔 Notification received in _layout:",
+        "[NOTIFICATION] 🔔 Notification received in _layout (app was open):",
         notification,
       );
 
@@ -396,9 +506,17 @@ export default function RootLayout() {
 
       // Determine source based on notification state
       const source = "app-open"; // App is already open (foreground/background)
-      handleNotificationData(notificationData, source);
+
+      // Small delay to ensure navigation is ready
+      setTimeout(() => {
+        handleNotificationData(notificationData, source);
+      }, 300);
+    } else if (notification && !isReadyForNotifications) {
+      console.log(
+        "[NOTIFICATION] ⏳ Notification received but app not ready yet, will process when ready...",
+      );
     }
-  }, [notification, handleNotificationData]);
+  }, [notification, isReadyForNotifications, handleNotificationData]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

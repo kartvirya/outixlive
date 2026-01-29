@@ -13,30 +13,22 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import {
-  getOrCreateEndpointArn,
-  registerTokenWithSNS,
-  sendPushNotificationViaSNS,
+    getOrCreateEndpointArn,
+    registerTokenWithSNS,
+    sendPushNotificationViaSNS,
 } from "./awsSnsServiceSimple";
 import {
-  logTokenValidation,
-  validateAndFormatSNSToken,
+    logTokenValidation,
+    validateAndFormatSNSToken,
 } from "./awsSnsTokenUtils";
-import {
-  startListeningForDeviceToken,
-  storeDeviceToken,
-} from "./iosDeviceTokenManager";
 import { getDeviceToken } from "./deviceToken";
+import {
+    startListeningForDeviceToken,
+    storeDeviceToken,
+} from "./iosDeviceTokenManager";
 
-// Configure how notifications are displayed when app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// NOTE: Notification handler is now configured in app/_layout.tsx at module level
+// This ensures it's set up BEFORE any components mount (critical for production)
 
 /**
  * Request notification permissions and setup Android channel
@@ -1344,9 +1336,13 @@ export async function debugPushTokenSetup() {
     console.log("\n3. Device Identifier:");
     try {
       const deviceId = await getDeviceToken();
-      console.log(`   ✅ Device ID (iOS Native Token): ${deviceId.substring(0, 20)}...`);
+      console.log(
+        `   ✅ Device ID (iOS Native Token): ${deviceId.substring(0, 20)}...`,
+      );
     } catch (error) {
-      console.log(`   ⚠️ Device ID not available: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.log(
+        `   ⚠️ Device ID not available: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
 
     // 4. Test token registration
