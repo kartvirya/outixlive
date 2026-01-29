@@ -13,7 +13,7 @@ import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
@@ -52,6 +52,231 @@ export default function RootLayout() {
 
   // Track if we've checked for last notification response
   const [hasCheckedLastResponse, setHasCheckedLastResponse] = useState(false);
+
+  // Extract notification ID from data (supports multiple field names)
+  const extractNotificationId = useCallback((data: any): string | null => {
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+
+    // Check for notification ID in various field names (case-insensitive)
+    const possibleFields = [
+      "notificationId",
+      "NotificationID",
+      "notification_id",
+      "NOTIFICATIONID",
+      "id",
+      "ID",
+      "alertId",
+      "AlertID",
+      "alert_id",
+      "ALERTID",
+      "orderId",
+      "OrderID",
+      "order_id",
+    ];
+
+    for (const field of possibleFields) {
+      // Check exact match first
+      if (
+        data[field] !== undefined &&
+        data[field] !== null &&
+        data[field] !== ""
+      ) {
+        const id = String(data[field]).trim();
+        if (id) {
+          console.log(
+            `[NOTIFICATION] ✅ Found notification ID in field "${field}":`,
+            id,
+          );
+          return id;
+        }
+      }
+
+      // Check case-insensitive match
+      const lowerField = field.toLowerCase();
+      for (const key in data) {
+        if (key.toLowerCase() === lowerField) {
+          const value = data[key];
+          if (value !== undefined && value !== null && value !== "") {
+            const id = String(value).trim();
+            if (id) {
+              console.log(
+                `[NOTIFICATION] ✅ Found notification ID in field "${key}":`,
+                id,
+              );
+              return id;
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }, []);
+
+  // Helper function to open bottom sheet with retries
+  const openNotificationSheet = useCallback(
+    (notificationId: string, retryCount = 0) => {
+      const maxRetries = 3;
+      const delay = retryCount === 0 ? 500 : 1000;
+
+      setTimeout(() => {
+        console.log(
+          `[NOTIFICATION] 🔼 Attempting to open bottom sheet (attempt ${retryCount + 1}/${maxRetries + 1})...`,
+        );
+        if (notificationSheetRef.current) {
+          try {
+            notificationSheetRef.current.snapToIndex(2);
+            console.log("[NOTIFICATION] ✅ Bottom sheet opened successfully!");
+          } catch (error) {
+            console.error(
+              "[NOTIFICATION] ❌ Error opening bottom sheet:",
+              error,
+            );
+            if (retryCount < maxRetries) {
+              console.log(`[NOTIFICATION] 🔄 Retrying in ${delay}ms...`);
+              openNotificationSheet(notificationId, retryCount + 1);
+            }
+          }
+        } else {
+          console.warn(
+            `[NOTIFICATION] ⚠️ Bottom sheet ref is null (attempt ${retryCount + 1}/${maxRetries + 1})`,
+          );
+          if (retryCount < maxRetries) {
+            console.log(`[NOTIFICATION] 🔄 Retrying in ${delay}ms...`);
+            openNotificationSheet(notificationId, retryCount + 1);
+          } else {
+            console.error(
+              "[NOTIFICATION] ❌ Failed to open bottom sheet after all retries!",
+            );
+          }
+        }
+      }, delay);
+    },
+    [],
+  );
+
+  // Handle notification data extraction and opening bottom sheet
+  const handleNotificationData = useCallback(
+    async (notificationData: any) => {
+      console.log("[NOTIFICATION] 🔍 Processing notification data...");
+      console.log(
+        "[NOTIFICATION] 📦 Full notification data:",
+        JSON.stringify(notificationData, null, 2),
+      );
+      console.log(
+        "[NOTIFICATION] 📦 Available keys:",
+        Object.keys(notificationData || {}),
+      );
+
+      // First, try to extract NotificationID directly (preferred method)
+      const notificationId = extractNotificationId(notificationData);
+
+      if (notificationId) {
+        console.log(
+          "[NOTIFICATION] ✅ Using NotificationID directly:",
+          notificationId,
+        );
+        setSelectedNotificationId(notificationId);
+        openNotificationSheet(notificationId);
+        return;
+      }
+
+      // Fallback: Try to match by notification_type and notification_message
+      console.log(
+        "[NOTIFICATION] ⚠️ No NotificationID found, trying fallback matching...",
+      );
+      const notificationType =
+        notificationData?.notification_type || notificationData?.type || "";
+      const notificationMessage =
+        notificationData?.notification_message ||
+        notificationData?.message ||
+        notificationData?.body ||
+        "";
+
+      console.log("[NOTIFICATION] 📋 Type:", notificationType);
+      console.log("[NOTIFICATION] 📋 Message:", notificationMessage);
+
+      if (notificationType || notificationMessage) {
+        console.log("[NOTIFICATION] 🔎 Fetching all alerts to find match...");
+
+        try {
+          // Import getMyAlerts at the top of the file
+          const { getMyAlerts } = await import("@/lib/api");
+          const alertsResponse = await getMyAlerts();
+
+          // Extract alerts from response
+          const alerts = Array.isArray(alertsResponse)
+            ? alertsResponse
+            : alertsResponse?.msg || alertsResponse?.alerts || [];
+
+          console.log("[NOTIFICATION] 📦 Found", alerts.length, "total alerts");
+
+          // Find matching alert by notification_type and notification_message
+          const matchingAlert = alerts.find((alert: any) => {
+            const typeMatch = alert.notification_type === notificationType;
+            const messageMatch =
+              alert.notification_message === notificationMessage ||
+              alert.notification === notificationMessage;
+
+            console.log(
+              "[NOTIFICATION] 🔍 Checking alert:",
+              alert.NotificationID,
+            );
+            console.log(
+              "[NOTIFICATION]   Type match:",
+              typeMatch,
+              `(${alert.notification_type} === ${notificationType})`,
+            );
+            console.log("[NOTIFICATION]   Message match:", messageMatch);
+
+            return typeMatch && messageMatch;
+          });
+
+          if (matchingAlert) {
+            console.log(
+              "[NOTIFICATION] ✅ Found matching alert:",
+              matchingAlert.NotificationID,
+            );
+            setSelectedNotificationId(matchingAlert.NotificationID);
+            openNotificationSheet(matchingAlert.NotificationID);
+          } else {
+            console.warn("[NOTIFICATION] ⚠️ No matching alert found");
+            console.warn(
+              "[NOTIFICATION] 🔍 Searched for type:",
+              notificationType,
+            );
+            console.warn(
+              "[NOTIFICATION] 🔍 Searched for message:",
+              notificationMessage,
+            );
+            console.warn(
+              "[NOTIFICATION] 💡 Tip: Include 'NotificationID' in notification data payload for direct matching",
+            );
+          }
+        } catch (error) {
+          console.error("[NOTIFICATION] ❌ Error fetching alerts:", error);
+        }
+      } else {
+        console.warn(
+          "[NOTIFICATION] ⚠️ No notification ID, type, or message found in data",
+        );
+        console.warn(
+          "[NOTIFICATION] 📦 Received keys:",
+          Object.keys(notificationData || {}),
+        );
+        console.warn(
+          "[NOTIFICATION] 📦 Full data:",
+          JSON.stringify(notificationData, null, 2),
+        );
+        console.warn(
+          "[NOTIFICATION] 💡 Tip: Include 'NotificationID' in notification data payload",
+        );
+      }
+    },
+    [extractNotificationId, openNotificationSheet],
+  );
 
   useEffect(() => {
     // Verify configuration on app start (only in development)
@@ -101,7 +326,7 @@ export default function RootLayout() {
           setHasCheckedLastResponse(true);
         });
     }
-  }, [hasCheckedLastResponse]);
+  }, [hasCheckedLastResponse, handleNotificationData]);
 
   useEffect(() => {
     if (nativePushToken) {
@@ -118,89 +343,6 @@ export default function RootLayout() {
       console.error("❌ Push notification error:", error);
     }
   }, [nativePushToken, devicePushToken, error]);
-
-  // Handle notification data extraction and opening bottom sheet
-  const handleNotificationData = async (notificationData: any) => {
-    console.log("[NOTIFICATION] 🔍 Processing notification data...");
-    console.log(
-      "[NOTIFICATION] 📦 Full notification data:",
-      JSON.stringify(notificationData, null, 2),
-    );
-    console.log(
-      "[NOTIFICATION] 📦 Available keys:",
-      Object.keys(notificationData),
-    );
-
-    // Extract notification type and message from the tapped notification
-    const notificationType = notificationData?.notification_type || notificationData?.type || "";
-    const notificationMessage = notificationData?.notification_message || notificationData?.message || notificationData?.body || "";
-
-    console.log("[NOTIFICATION] 📋 Type:", notificationType);
-    console.log("[NOTIFICATION] 📋 Message:", notificationMessage);
-
-    if (notificationType || notificationMessage) {
-      console.log("[NOTIFICATION] 🔎 Fetching all alerts to find match...");
-      
-      try {
-        // Import getMyAlerts at the top of the file
-        const { getMyAlerts } = await import("@/lib/api");
-        const alertsResponse = await getMyAlerts();
-        
-        // Extract alerts from response
-        const alerts = Array.isArray(alertsResponse)
-          ? alertsResponse
-          : alertsResponse?.msg || alertsResponse?.alerts || [];
-
-        console.log("[NOTIFICATION] 📦 Found", alerts.length, "total alerts");
-
-        // Find matching alert by notification_type and notification_message
-        const matchingAlert = alerts.find((alert: any) => {
-          const typeMatch = alert.notification_type === notificationType;
-          const messageMatch = alert.notification_message === notificationMessage || 
-                              alert.notification === notificationMessage;
-          
-          console.log("[NOTIFICATION] 🔍 Checking alert:", alert.NotificationID);
-          console.log("[NOTIFICATION]   Type match:", typeMatch, `(${alert.notification_type} === ${notificationType})`);
-          console.log("[NOTIFICATION]   Message match:", messageMatch);
-          
-          return typeMatch && messageMatch;
-        });
-
-        if (matchingAlert) {
-          console.log("[NOTIFICATION] ✅ Found matching alert:", matchingAlert.NotificationID);
-          setSelectedNotificationId(matchingAlert.NotificationID);
-
-          // Open the bottom sheet with a delay to ensure ref is ready
-          setTimeout(() => {
-            console.log("[NOTIFICATION] 🔼 Attempting to open bottom sheet...");
-            if (notificationSheetRef.current) {
-              console.log("[NOTIFICATION] ✅ Bottom sheet ref exists, opening...");
-              notificationSheetRef.current.snapToIndex(2);
-              console.log("[NOTIFICATION] ✅ Bottom sheet opened to index 2");
-            } else {
-              console.error("[NOTIFICATION] ❌ Bottom sheet ref is null!");
-            }
-          }, 500);
-        } else {
-          console.warn("[NOTIFICATION] ⚠️ No matching alert found");
-          console.warn("[NOTIFICATION] 🔍 Searched for type:", notificationType);
-          console.warn("[NOTIFICATION] 🔍 Searched for message:", notificationMessage);
-        }
-      } catch (error) {
-        console.error("[NOTIFICATION] ❌ Error fetching alerts:", error);
-      }
-    } else {
-      console.warn("[NOTIFICATION] ⚠️ No notification type or message found in data");
-      console.warn(
-        "[NOTIFICATION] 📦 Received keys:",
-        Object.keys(notificationData),
-      );
-      console.warn(
-        "[NOTIFICATION] 📦 Full data:",
-        JSON.stringify(notificationData, null, 2),
-      );
-    }
-  };
 
   // Handle notification from usePushNotifications hook
   useEffect(() => {
@@ -222,7 +364,7 @@ export default function RootLayout() {
 
       handleNotificationData(notificationData);
     }
-  }, [notification]);
+  }, [notification, handleNotificationData]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
