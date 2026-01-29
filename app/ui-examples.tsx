@@ -1,8 +1,9 @@
 import { Bell } from "lucide-react-native";
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { EventCardEnhanced } from "../components/event-card-enhanced";
 import { NotificationDeepLinkTest } from "../components/notification-deep-link-test";
+import { NotificationTestSimulator } from "../components/notification-test-simulator";
 import {
     AnimatedCard,
     FadeInView,
@@ -27,6 +28,23 @@ import {
 
 export default function UIExamplesScreen() {
   const [isLoading] = useState(false);
+
+  // Handler for test simulator
+  const handleTestNotificationTap = (data: any) => {
+    console.log("[TEST] 🧪 Test notification tap received:", data);
+    // Call the global handler if available (DEV only)
+    if (__DEV__ && (global as any).handleNotificationData) {
+      (global as any).handleNotificationData(data);
+    } else {
+      console.warn(
+        "[TEST] ⚠️ handleNotificationData not available. Make sure you're in DEV mode.",
+      );
+      Alert.alert(
+        "Test Mode",
+        "handleNotificationData not available. Check console for details.",
+      );
+    }
+  };
 
   // Mock event data
   const events = [
@@ -196,7 +214,23 @@ export default function UIExamplesScreen() {
         </View>
       </SlideInView>
 
-      {/* Section 5: Usage Guide */}
+      {/* Section 5: Notification Test Simulator */}
+      <FadeInView delay={450}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            🔬 Notification Test Simulator
+          </Text>
+          <Text style={styles.sectionDescription}>
+            Test notification flow before using real device. Simulates all
+            scenarios.
+          </Text>
+          <NotificationTestSimulator
+            onNotificationTap={handleTestNotificationTap}
+          />
+        </View>
+      </FadeInView>
+
+      {/* Section 6: Usage Guide */}
       <FadeInView delay={500}>
         <View style={[styles.section, styles.guideSection]}>
           <Text style={styles.sectionTitle}>How to Use</Text>

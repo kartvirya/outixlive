@@ -372,6 +372,23 @@ export default function RootLayout() {
     [extractNotificationId, openNotificationSheet],
   );
 
+  // Expose handleNotificationData globally for testing (DEV only)
+  useEffect(() => {
+    if (__DEV__) {
+      // @ts-ignore - For testing purposes
+      global.handleNotificationData = (data: any) => {
+        console.log("[TEST] 🧪 Testing notification handler with:", data);
+        handleNotificationData(data, "test");
+      };
+      console.log(
+        "[TEST] ✅ handleNotificationData exposed globally for testing",
+      );
+      console.log(
+        "[TEST] 💡 Use: global.handleNotificationData({ NotificationID: '123' })",
+      );
+    }
+  }, [handleNotificationData]);
+
   // Track navigation ready state - when segments are available, navigation is ready
   useEffect(() => {
     if (segments.length > 0 && !isNavigationReady) {
