@@ -2,8 +2,10 @@ import { BuybackAlertItem } from "@/components/buyback-alert-item";
 import { ExpandableNotificationItem } from "@/components/expandable-notification-item";
 import { Header } from "@/components/header";
 import { useBuyback } from "@/contexts/BuybackContext";
+import { useNotifications } from "@/contexts/NotificationContext";
 import { type Notification } from "@/data/mockData";
 import { getMyAlerts, markAlertAsRead } from "@/lib/api";
+import { formatRelativeTime } from "@/lib/dateUtils";
 import { Bell } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -25,6 +27,7 @@ export default function AlertsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { offers } = useBuyback();
+  const { refreshNotifications } = useNotifications();
 
   const unreadCount = notificationsList.filter((n) => !n.isRead).length;
   const activeBuybackOffers = offers.filter((o) => {
@@ -37,7 +40,6 @@ export default function AlertsScreen() {
 
   useEffect(() => {
     loadAlerts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAlerts = async (isRefresh = false) => {
@@ -62,42 +64,27 @@ export default function AlertsScreen() {
       const transformed: Notification[] = alerts
         .filter((a: any) => a)
         .map((a: any) => {
+          // Handle the 'opened' field from API (0 or 1 as string or number)
           const openedValue = a.opened;
           const isRead =
             typeof openedValue === "string"
               ? openedValue === "1" || openedValue.toLowerCase() === "true"
               : Boolean(openedValue);
 
+          // Parse and format the PushedDate using timezone-aware utility
           const pushedDateStr = a.PushedDate || a.pushedDate || "";
-          let timeLabel = pushedDateStr;
-          if (pushedDateStr) {
-            const parsed = new Date(pushedDateStr.replace(" ", "T"));
-            if (!Number.isNaN(parsed.getTime())) {
-              const now = new Date();
-              const diffMs = now.getTime() - parsed.getTime();
-              const diffMinutes = Math.floor(diffMs / 60000);
-              if (diffMinutes < 1) {
-                timeLabel = "Just now";
-              } else if (diffMinutes < 60) {
-                timeLabel = `${diffMinutes}m ago`;
-              } else {
-                const diffHours = Math.floor(diffMinutes / 60);
-                if (diffHours < 24) {
-                  timeLabel = `${diffHours}h ago`;
-                } else {
-                  timeLabel = parsed.toLocaleString();
-                }
-              }
-            }
-          }
+          const timeLabel = formatRelativeTime(pushedDateStr);
 
+          // Map notification_type to our type system
           const typeRaw = (a.notification_type || "").toString().toLowerCase();
           let mappedType: Notification["type"] = "alert";
           if (typeRaw.includes("urgent")) mappedType = "urgent";
           else if (typeRaw.includes("schedule")) mappedType = "schedule";
           else if (typeRaw.includes("class") || typeRaw.includes("call"))
             mappedType = "call";
+          else if (typeRaw.includes("service")) mappedType = "service_request";
 
+          // Get the message, preferring notification_message over notification
           const messageRaw = a.notification_message || a.notification || "";
           const message = (messageRaw as string).replace(/\r\n/g, "\n").trim();
 
@@ -107,7 +94,7 @@ export default function AlertsScreen() {
             message: message || "No message",
             time: timeLabel,
             type: mappedType,
-            eventName: a.alertinfo || undefined,
+            eventName: a.EventInfo || a.alertinfo || undefined,
             eventId: a.EventID || a.eventId || undefined,
             venueId: undefined,
             userId: undefined,
@@ -141,6 +128,8 @@ export default function AlertsScreen() {
 
     try {
       await markAlertAsRead(id);
+      // Refresh the notification badge count
+      await refreshNotifications();
     } catch (err) {
       // Revert on error
       setNotificationsList((prev) =>
@@ -154,7 +143,7 @@ export default function AlertsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <Header notificationCount={totalUnread} />
+      <Header />
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>Alerts</Text>
@@ -184,7 +173,7 @@ export default function AlertsScreen() {
               <Text style={styles.emptyTitle}>Loading alerts...</Text>
             </View>
           ) : notificationsList.length > 0 || activeBuybackOffers.length > 0 ? (
-            <View style={styles.notificationList}>
+            <>
               {activeBuybackOffers.map((offer) => (
                 <BuybackAlertItem key={offer.id} offer={offer} />
               ))}
@@ -195,7 +184,7 @@ export default function AlertsScreen() {
                   onMarkRead={markAsRead}
                 />
               ))}
-            </View>
+            </>
           ) : (
             <View style={styles.emptyState}>
               <Bell size={40} color="#737373" />
@@ -265,72 +254,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     color: "#22c55e",
-  },
-  notificationList: {
-    borderRadius: 12,
-    backgroundColor: "#111827",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    overflow: "hidden",
-  },
-  notificationItem: {
-    flexDirection: "row",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.05)",
-  },
-  unreadNotification: {
-    backgroundColor: "rgba(34, 197, 94, 0.05)",
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  notificationContent: {
-    flex: 1,
-  },
-  notificationHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fafafa",
-    flex: 1,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#22c55e",
-    marginLeft: 8,
-  },
-  notificationMessage: {
-    fontSize: 14,
-    color: "#d1d5db",
-    marginBottom: 4,
-  },
-  notificationDetails: {
-    fontSize: 12,
-    color: "#9ca3af",
-    marginTop: 4,
-    fontStyle: "italic",
-  },
-  serviceAmount: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#22c55e",
-    marginTop: 4,
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: "#737373",
-    marginTop: 4,
   },
 });

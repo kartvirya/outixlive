@@ -1,9 +1,11 @@
 import { Bell, Calendar, ChevronRight, MapPin } from "lucide-react-native";
-import React from "react";
+import React, { useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
-import { AnimatedPressable } from "./ui/animated-pressable";
+import { AnimatedCard } from "./ui/animated-card";
+import { BlurViewWrapper } from "./ui/blur-view-wrapper";
+import { EventCardSkeleton } from "./ui/skeleton-loader";
 
-interface EventCardProps {
+interface EventCardEnhancedProps {
   id: string;
   name: string;
   image?: string;
@@ -14,11 +16,11 @@ interface EventCardProps {
   venuelogo?: string;
   isSubscribed?: number; // 0 or 1
   onPress?: () => void;
-  promoterId?: string;
-  isAdminOwned?: boolean;
+  isLoading?: boolean;
+  delay?: number;
 }
 
-export const EventCard = ({
+export const EventCardEnhanced = ({
   id,
   name,
   image,
@@ -29,9 +31,10 @@ export const EventCard = ({
   venuelogo,
   isSubscribed = 0,
   onPress,
-  promoterId,
-  isAdminOwned = false,
-}: EventCardProps) => {
+  isLoading = false,
+  delay = 0,
+}: EventCardEnhancedProps) => {
+  const [imageLoading, setImageLoading] = useState(true);
   const eventLogo = logo || venuelogo || "";
   const eventImage = coverImage || image || "";
 
@@ -39,27 +42,49 @@ export const EventCard = ({
   const isEventSubscribed =
     isSubscribed === 1 || isSubscribed === "1" || isSubscribed === true;
 
+  if (isLoading) {
+    return <EventCardSkeleton colorMode="light" />;
+  }
+
   return (
-    <AnimatedPressable
-      style={[styles.card, isAdminOwned && styles.adminOwnedCard]}
+    <AnimatedCard
+      style={styles.card}
       onPress={onPress}
       animationType="lift"
-      hapticStyle="medium"
+      hapticFeedback={true}
+      delay={delay}
     >
       {eventImage ? (
-        <Image source={{ uri: eventImage }} style={styles.backgroundImage} />
+        <>
+          {imageLoading && (
+            <View style={styles.imagePlaceholder}>
+              <EventCardSkeleton colorMode="light" />
+            </View>
+          )}
+          <Image
+            source={{ uri: eventImage }}
+            style={styles.backgroundImage}
+            onLoadEnd={() => setImageLoading(false)}
+          />
+        </>
       ) : (
         <View style={styles.gradientBackground} />
       )}
+
+      {/* Blur overlay with glassmorphism effect */}
       <View style={styles.overlay} />
 
       {isEventSubscribed && (
-        <View style={styles.subscribedBadge}>
-          <Bell size={16} color="#fff" fill="#fff" />
-        </View>
+        <BlurViewWrapper
+          intensity={40}
+          tint="dark"
+          style={styles.subscribedBadge}
+        >
+          <Bell size={16} color="#22c55e" fill="#22c55e" />
+        </BlurViewWrapper>
       )}
 
-      <View style={styles.content}>
+      <BlurViewWrapper intensity={30} tint="dark" style={styles.content}>
         {eventLogo ? (
           <View style={[styles.logoContainer, { marginRight: 16 }]}>
             <Image
@@ -77,7 +102,7 @@ export const EventCard = ({
           <View style={styles.locationRow}>
             <Calendar
               size={14}
-              color="rgba(255, 255, 255, 0.7)"
+              color="rgba(255, 255, 255, 0.9)"
               style={{ marginRight: 6 }}
             />
             <Text style={styles.location} numberOfLines={1}>
@@ -88,7 +113,7 @@ export const EventCard = ({
             <View style={styles.locationRow}>
               <MapPin
                 size={14}
-                color="rgba(255, 255, 255, 0.7)"
+                color="rgba(255, 255, 255, 0.9)"
                 style={{ marginRight: 6 }}
               />
               <Text style={styles.location} numberOfLines={1}>
@@ -98,9 +123,9 @@ export const EventCard = ({
           )}
         </View>
 
-        <ChevronRight size={20} color="rgba(255, 255, 255, 0.5)" />
-      </View>
-    </AnimatedPressable>
+        <ChevronRight size={20} color="rgba(255, 255, 255, 0.8)" />
+      </BlurViewWrapper>
+    </AnimatedCard>
   );
 };
 
@@ -109,14 +134,20 @@ const styles = StyleSheet.create({
     position: "relative",
     borderRadius: 16,
     overflow: "hidden",
-    marginBottom: 12,
+    marginBottom: 16,
     backgroundColor: "#111827",
-  },
-  adminOwnedCard: {
-    borderWidth: 2,
-    borderColor: "#22c55e",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
   },
   backgroundImage: {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+  },
+  imagePlaceholder: {
     position: "absolute",
     width: "100%",
     height: "100%",
@@ -131,22 +162,23 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: "100%",
     height: "100%",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
   content: {
     position: "relative",
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
+    borderRadius: 16,
   },
   logoContainer: {
     width: 56,
     height: 56,
     borderRadius: 28,
     overflow: "hidden",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   logo: {
     width: "100%",
@@ -169,26 +201,21 @@ const styles = StyleSheet.create({
   },
   location: {
     fontSize: 14,
-    color: "rgba(255, 255, 255, 0.7)",
+    color: "rgba(255, 255, 255, 0.9)",
     flex: 1,
   },
   subscribedBadge: {
     position: "absolute",
-    top: 30,
-    right: 50,
+    top: 16,
+    right: 16,
     borderRadius: 20,
-    backgroundColor: "#22c55e",
     width: 36,
     height: 36,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 10,
     elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
     borderWidth: 2,
-    borderColor: "#fff",
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
 });

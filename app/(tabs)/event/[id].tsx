@@ -235,6 +235,7 @@ export default function EventDetailScreen() {
     }
 
     setIsSendingAlert(true);
+    console.log("📤 Sending alert with icon number:", alertNotificationIcon);
     try {
       await sendEventAlert(
         event.promoterId,
@@ -268,6 +269,13 @@ export default function EventDetailScreen() {
         : data?.msg || data?.alerts || data?.data || [];
 
       if (Array.isArray(alerts)) {
+        // Debug: Log first alert to see structure
+        if (alerts.length > 0) {
+          console.log(
+            "First alert structure:",
+            JSON.stringify(alerts[0], null, 2),
+          );
+        }
         setEventAlerts(alerts);
       }
     } catch {

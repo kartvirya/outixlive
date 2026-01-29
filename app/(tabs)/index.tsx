@@ -3,39 +3,41 @@ import { PromoterCard } from "@/components/promoter-card";
 import { SearchBar } from "@/components/search-bar";
 import { AnimatedPressable } from "@/components/ui/animated-pressable";
 import { Button } from "@/components/ui/button";
+import { useAdmin } from "@/contexts/AdminContext";
 import { useBuyback } from "@/contexts/BuybackContext";
 import type { Notification, Promoter } from "@/data/mockData";
-import { notifications } from "@/data/mockData";
-import { getPromoters } from "@/lib/api";
+import { getMyAlerts, getPromoters } from "@/lib/api";
 import {
-    distanceKm,
-    getBrowserLocation,
-    isValidLatLng,
-    type LatLng,
+  distanceKm,
+  getBrowserLocation,
+  isValidLatLng,
+  type LatLng,
 } from "@/lib/utils";
 import { useRouter } from "expo-router";
 import {
-    Bell,
-    ChevronDown,
-    ChevronUp,
-    MapPin,
-    Navigation,
-    Search,
+  Bell,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
+  Navigation,
+  Search,
 } from "lucide-react-native";
+import { MotiView } from "moti";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { canAccessPromoter } = useAdmin();
   const [searchQuery, setSearchQuery] = useState("");
   const [hasLocation, setHasLocation] = useState(false);
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
@@ -45,10 +47,11 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isHeaderExpanded, setIsHeaderExpanded] = useState(true);
+  const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const { offers } = useBuyback();
 
-  // Calculate unread notification count
+  // Calculate unread notification count from real data
   const unreadCount = notifications.filter(
     (n: Notification) => !n.isRead,
   ).length;
@@ -62,7 +65,52 @@ export default function HomeScreen() {
 
   useEffect(() => {
     loadPromoters();
+    loadNotifications();
   }, []);
+
+  const loadNotifications = async () => {
+    try {
+      const data = await getMyAlerts();
+
+      // Extract alerts from API response
+      const alertsList = Array.isArray(data)
+        ? data
+        : data?.msg || data?.alerts || data?.notifications || [];
+
+      if (Array.isArray(alertsList)) {
+        // Transform API alerts to match Notification interface
+        const transformed: Notification[] = alertsList
+          .filter((a: any) => a)
+          .map((a: any) => {
+            const openedValue = a.opened;
+            const isRead =
+              typeof openedValue === "string"
+                ? openedValue === "1" || openedValue.toLowerCase() === "true"
+                : Boolean(openedValue);
+
+            return {
+              id: a.id || a._id || String(Math.random()),
+              title: a.title || a.Title || "Notification",
+              message: a.message || a.Message || "",
+              time: a.time || a.PushedDate || "",
+              type: a.type || "info",
+              eventName: a.eventName || a.EventName,
+              eventId: a.eventId || a.EventId,
+              venueId: a.venueId || a.VenueId,
+              userId: a.userId || a.UserId,
+              isRead: isRead,
+            };
+          });
+
+        setNotifications(transformed);
+      } else {
+        setNotifications([]);
+      }
+    } catch (error) {
+      console.error("Error loading notifications:", error);
+      setNotifications([]);
+    }
+  };
 
   const loadPromoters = async (isRefresh = false) => {
     try {
@@ -132,6 +180,7 @@ export default function HomeScreen() {
 
   const onRefresh = () => {
     loadPromoters(true);
+    loadNotifications(); // Also reload notifications on refresh
   };
 
   // Filter by search query
@@ -186,7 +235,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <Header notificationCount={totalUnread} />
+      <Header />
       <View style={styles.content}>
         {/* Single Collapsible Section */}
         <View style={styles.collapsibleSection}>
@@ -214,7 +263,13 @@ export default function HomeScreen() {
 
           {/* Expandable Content */}
           {isHeaderExpanded && (
-            <View style={styles.expandableContent}>
+            <MotiView
+              from={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ type: "timing", duration: 300 }}
+              style={styles.expandableContent}
+            >
               <View style={styles.hero}>
                 <Text style={styles.heroSubtitle}>Browse venues near you</Text>
               </View>
@@ -259,7 +314,7 @@ export default function HomeScreen() {
                   placeholder="Search venues or locations..."
                 />
               </View>
-            </View>
+            </MotiView>
           )}
         </View>
 
@@ -356,14 +411,8 @@ export default function HomeScreen() {
                 longitude={promoter.longitude}
                 address={promoter.address}
                 isSubscribed={promoter.isSubscribed}
-                onPress={() =>
-                  router.push({
-                    pathname: `/promoter/${promoter.id}`,
-                    params: {
-                      promoterData: JSON.stringify(promoter),
-                    },
-                  })
-                }
+                isAdminOwned={canAccessPromoter(promoter.id)}
+                onPress={() => router.push(`/(tabs)/promoter/${promoter.id}`)}
               />
             ))
           ) : (

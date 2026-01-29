@@ -1,7 +1,9 @@
 import { EventCard } from "@/components/event-card";
 import { Header } from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
+import { AnimatedPressable } from "@/components/ui/animated-pressable";
 import { Button } from "@/components/ui/button";
+import { useAdmin } from "@/contexts/AdminContext";
 import type { Event } from "@/data/mockData";
 import { getEvents } from "@/lib/api";
 import {
@@ -11,7 +13,15 @@ import {
     type LatLng,
 } from "@/lib/utils";
 import { useRouter } from "expo-router";
-import { Bell, MapPin, Navigation, Search } from "lucide-react-native";
+import {
+    Bell,
+    ChevronDown,
+    ChevronUp,
+    MapPin,
+    Navigation,
+    Search,
+} from "lucide-react-native";
+import { MotiView } from "moti";
 import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -20,12 +30,13 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    View
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function EventsScreen() {
   const router = useRouter();
+  const { canAccessEvent } = useAdmin();
   const [searchQuery, setSearchQuery] = useState("");
   const [hasLocation, setHasLocation] = useState(false);
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
@@ -47,6 +58,7 @@ export default function EventsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
 
   useEffect(() => {
     loadEvents();
@@ -60,7 +72,7 @@ export default function EventsScreen() {
         setIsLoading(true);
       }
       setError(null);
-      console.log('[EVENTS] 🔄 Refreshing events list...');
+      console.log("[EVENTS] 🔄 Refreshing events list...");
       const data = await getEvents();
 
       // Transform API response to match Event interface
@@ -134,10 +146,10 @@ export default function EventsScreen() {
         });
 
       setEventsList(transformedEvents);
-      console.log('[EVENTS] ✅ Events loaded:', transformedEvents.length);
+      console.log("[EVENTS] ✅ Events loaded:", transformedEvents.length);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load events");
-      console.error('[EVENTS] ❌ Error loading events:', err);
+      console.error("[EVENTS] ❌ Error loading events:", err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -145,7 +157,7 @@ export default function EventsScreen() {
   };
 
   const onRefresh = () => {
-    console.log('[EVENTS] 👆 Pull to refresh triggered');
+    console.log("[EVENTS] 👆 Pull to refresh triggered");
     loadEvents(true);
   };
 
@@ -169,12 +181,24 @@ export default function EventsScreen() {
     const origin = userLocation;
     return [...tabFilteredEvents].sort((a, b) => {
       const aLoc = {
-        latitude: typeof a.latitude === "string" ? parseFloat(a.latitude) : (a.latitude ?? NaN),
-        longitude: typeof a.longitude === "string" ? parseFloat(a.longitude) : (a.longitude ?? NaN),
+        latitude:
+          typeof a.latitude === "string"
+            ? parseFloat(a.latitude)
+            : (a.latitude ?? NaN),
+        longitude:
+          typeof a.longitude === "string"
+            ? parseFloat(a.longitude)
+            : (a.longitude ?? NaN),
       };
       const bLoc = {
-        latitude: typeof b.latitude === "string" ? parseFloat(b.latitude) : (b.latitude ?? NaN),
-        longitude: typeof b.longitude === "string" ? parseFloat(b.longitude) : (b.longitude ?? NaN),
+        latitude:
+          typeof b.latitude === "string"
+            ? parseFloat(b.latitude)
+            : (b.latitude ?? NaN),
+        longitude:
+          typeof b.longitude === "string"
+            ? parseFloat(b.longitude)
+            : (b.longitude ?? NaN),
       };
       const aValid = isValidLatLng(aLoc);
       const bValid = isValidLatLng(bLoc);
@@ -205,42 +229,87 @@ export default function EventsScreen() {
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Header />
       <View style={styles.content}>
-        <View style={styles.hero}>
-          <Text style={styles.heroTitle}>Find Your Events</Text>
-          <Text style={styles.heroSubtitle}>
-            Browse events from your venues
-          </Text>
-        </View>
-
-        {!hasLocation && (
-          <Button
-            variant="outline"
-            onPress={requestLocationSort}
-            style={styles.locationButton}
-            disabled={isLocating}
+        {/* Collapsible Section */}
+        <View style={styles.collapsibleSection}>
+          <AnimatedPressable
+            onPress={() => setIsHeaderExpanded(!isHeaderExpanded)}
+            animationType="press"
+            style={styles.collapsibleHeader}
           >
-            <Navigation size={16} color="#22c55e" style={{ marginRight: 8 }} />
-            <Text style={styles.buttonText}>
-              {isLocating ? "Getting your location..." : "Use my location to sort by distance"}
-            </Text>
-          </Button>
-        )}
+            <View style={styles.heroCompact}>
+              <Text style={styles.heroTitleCompact}>Find Your Events</Text>
+              {!isHeaderExpanded && (
+                <Text style={styles.heroSubtitleCompact}>
+                  {hasLocation
+                    ? "Sorted by distance"
+                    : "Browse events from your venues"}
+                </Text>
+              )}
+            </View>
+            {isHeaderExpanded ? (
+              <ChevronUp size={24} color="#22c55e" />
+            ) : (
+              <ChevronDown size={24} color="#737373" />
+            )}
+          </AnimatedPressable>
 
-        {hasLocation && (
-          <View style={styles.locationStatus}>
-            <MapPin size={16} color="#22c55e" style={{ marginRight: 8 }} />
-            <Text style={styles.locationStatusText}>
-              Sorted by distance from you
-            </Text>
-          </View>
-        )}
+          {/* Expandable Content */}
+          {isHeaderExpanded && (
+            <MotiView
+              from={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ type: "timing", duration: 300 }}
+              style={styles.expandableContent}
+            >
+              <View style={styles.hero}>
+                <Text style={styles.heroSubtitle}>
+                  Browse events from your venues
+                </Text>
+              </View>
 
-        <View style={styles.searchContainer}>
-          <SearchBar
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search events..."
-          />
+              {!hasLocation && (
+                <Button
+                  variant="outline"
+                  onPress={requestLocationSort}
+                  style={styles.locationButton}
+                  disabled={isLocating}
+                >
+                  <Navigation
+                    size={16}
+                    color="#22c55e"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={styles.buttonText}>
+                    {isLocating
+                      ? "Getting your location..."
+                      : "Use my location to sort by distance"}
+                  </Text>
+                </Button>
+              )}
+
+              {hasLocation && (
+                <View style={styles.locationStatus}>
+                  <MapPin
+                    size={16}
+                    color="#22c55e"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={styles.locationStatusText}>
+                    Sorted by distance from you
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.searchContainer}>
+                <SearchBar
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Search events..."
+                />
+              </View>
+            </MotiView>
+          )}
         </View>
 
         <View style={styles.filterContainer}>
@@ -287,8 +356,8 @@ export default function EventsScreen() {
           </View>
         </View>
 
-        <ScrollView 
-          style={styles.list} 
+        <ScrollView
+          style={styles.list}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -336,9 +405,11 @@ export default function EventsScreen() {
                   logo={event.logo}
                   venuelogo={event.venuelogo}
                   isSubscribed={event.isSubscribed}
+                  promoterId={event.promoterId}
+                  isAdminOwned={canAccessEvent(event.promoterId)}
                   onPress={() =>
                     router.push({
-                      pathname: `/event/${event.id}` as any,
+                      pathname: `/(tabs)/event/${event.id}` as any,
                       params: {
                         eventData: JSON.stringify(originalEvent || event),
                       },
@@ -370,6 +441,41 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 16,
+  },
+  collapsibleSection: {
+    marginTop: 12,
+    backgroundColor: "#18181b",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  collapsibleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    backgroundColor: "#18181b",
+  },
+  heroCompact: {
+    flex: 1,
+  },
+  heroTitleCompact: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#fafafa",
+    marginBottom: 4,
+  },
+  heroSubtitleCompact: {
+    fontSize: 13,
+    color: "#737373",
+  },
+  expandableContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.05)",
   },
   hero: {
     alignItems: "center",

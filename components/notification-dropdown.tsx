@@ -1,15 +1,16 @@
 import { getMyAlerts, markAlertAsRead } from "@/lib/api";
+import { formatFullDateTime } from "@/lib/dateUtils";
+import { getNotificationIcon } from "@/lib/icon-utils";
 import { useRouter } from "expo-router";
-import { Bell } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 interface NotificationDropdownProps {
@@ -25,6 +26,7 @@ interface Alert {
   notification_message: string;
   PushedDate: string;
   isRead?: boolean;
+  notification_icon?: string | number;
 }
 
 export const NotificationDropdown = ({
@@ -169,6 +171,8 @@ export const NotificationDropdown = ({
                   {alerts.map((alert) => {
                     const isMarkingRead = markingReadIds.has(alert.id);
                     const isRead = alert.isRead;
+                    const iconNumber = String(alert.notification_icon || "1");
+                    const AlertIcon = getNotificationIcon(iconNumber);
 
                     return (
                       <TouchableOpacity
@@ -190,7 +194,7 @@ export const NotificationDropdown = ({
                             {isMarkingRead ? (
                               <ActivityIndicator size="small" color="#22c55e" />
                             ) : (
-                              <Bell
+                              <AlertIcon
                                 size={14}
                                 color={isRead ? "#737373" : "#22c55e"}
                               />
@@ -211,7 +215,7 @@ export const NotificationDropdown = ({
                               )}
                             </View>
                             <Text style={styles.alertTime}>
-                              {formatTime(alert.PushedDate || "")}
+                              {formatFullDateTime(alert.PushedDate || "")}
                             </Text>
                           </View>
                         </View>
@@ -238,7 +242,10 @@ export const NotificationDropdown = ({
               </>
             ) : (
               <View style={styles.emptyState}>
-                <Bell size={32} color="#737373" />
+                {(() => {
+                  const EmptyIcon = getNotificationIcon("1");
+                  return <EmptyIcon size={32} color="#737373" />;
+                })()}
                 <Text style={styles.emptyTitle}>No notifications</Text>
                 <Text style={styles.emptySubtitle}>
                   You'll see your recent notifications here

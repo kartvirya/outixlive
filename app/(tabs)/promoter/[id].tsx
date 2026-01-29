@@ -30,7 +30,7 @@ import {
     Send,
     X
 } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Image,
@@ -222,10 +222,21 @@ export default function PromoterDetailScreen() {
       const sortedEvents = transformedEvents.sort((a: any, b: any) => {
         const dateA = a.originalDate ? new Date(a.originalDate).getTime() : 0;
         const dateB = b.originalDate ? new Date(b.originalDate).getTime() : 0;
-        return dateB - dateA; // Most recent first
+        return dateA - dateB; // Upcoming events first
       });
 
-      setPromoterEvents(sortedEvents.slice(0, 3)); // Limit to 3 events
+      // Remove originalDate before setting state and limit to 3 events
+      const limitedEvents = sortedEvents
+        .slice(0, 3)
+        .map(({ originalDate, ...rest }: any) => rest);
+      setPromoterEvents(limitedEvents);
+
+      // Update event count based on all events (not limited)
+      const updatedTransformed = {
+        ...transformed,
+        eventCount: transformedEvents.length,
+      };
+      setPromoter(updatedTransformed);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load promoter details",
@@ -285,6 +296,14 @@ export default function PromoterDetailScreen() {
     if (!promoter) return;
     const wasSubscribed = promoter.isSubscribed;
 
+    console.log("[PROMOTER SUBSCRIBE] 🔄 Starting subscription toggle");
+    console.log("[PROMOTER SUBSCRIBE] 📊 Current state:", {
+      promoterId: id,
+      promoterName: promoter.name,
+      wasSubscribed: wasSubscribed,
+      action: wasSubscribed === 1 ? "UNSUBSCRIBE" : "SUBSCRIBE",
+    });
+
     try {
       // Optimistically update UI - toggle between 0 and 1
       setPromoter((prev) => {
@@ -292,18 +311,35 @@ export default function PromoterDetailScreen() {
         return { ...prev, isSubscribed: prev.isSubscribed === 1 ? 0 : 1 };
       });
 
+      console.log("[PROMOTER SUBSCRIBE] 🔄 UI updated optimistically");
+
       // Make API call based on subscription status
       if (wasSubscribed === 1) {
+        console.log(
+          "[PROMOTER SUBSCRIBE] 📤 Calling unsubscribeFromPromoter API",
+        );
         await unsubscribeFromPromoter(id);
+        console.log("[PROMOTER SUBSCRIBE] ✅ Successfully unsubscribed");
       } else {
+        console.log("[PROMOTER SUBSCRIBE] 📤 Calling subscribeToPromoter API");
         await subscribeToPromoter(id);
+        console.log("[PROMOTER SUBSCRIBE] ✅ Successfully subscribed");
       }
+
+      console.log(
+        "[PROMOTER SUBSCRIBE] 🎉 Subscription toggle completed successfully",
+      );
     } catch (err) {
+      console.error(
+        "[PROMOTER SUBSCRIBE] ❌ Error during subscription toggle:",
+        err,
+      );
       // Revert on error
       setPromoter((prev) => {
         if (!prev) return promoter;
         return { ...prev, isSubscribed: wasSubscribed };
       });
+      console.log("[PROMOTER SUBSCRIBE] 🔄 Reverted UI to previous state");
     }
   };
 
@@ -509,7 +545,7 @@ export default function PromoterDetailScreen() {
                   {...event}
                   promoterId={event.promoterId}
                   isAdminOwned={canAccessEvent(event.promoterId)}
-                  onPress={() => router.push(`/event/${event.id}`)}
+                  onPress={() => router.push(`/(tabs)/event/${event.id}`)}
                 />
               ))}
             </View>

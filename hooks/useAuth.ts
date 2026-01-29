@@ -1,6 +1,7 @@
 import { BASE_URL } from "@/constants/config";
 import { getDeviceToken } from "@/lib/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Updates from "expo-updates";
 import { useCallback, useEffect, useState } from "react";
 
 export interface User {
@@ -9,6 +10,8 @@ export interface User {
   name: string;
   phone?: string;
   avatar?: string;
+  promoterId?: string;
+  PromoterId?: string;  // API uses this field name
 }
 
 interface AuthState {
@@ -33,12 +36,12 @@ export const useAuth = () => {
       try {
         // Get iOS native APNs device token (same token used everywhere)
         try {
-          const { getDeviceToken } = await import('@/lib/deviceToken');
+          const { getDeviceToken } = await import("@/lib/deviceToken");
           const deviceToken = await getDeviceToken();
-          
+
           // Register token with server (works without auth)
           try {
-            const { registerToken } = await import('@/lib/api');
+            const { registerToken } = await import("@/lib/api");
             await registerToken(deviceToken);
           } catch (error) {
             // Don't block app initialization if token registration fails
@@ -119,15 +122,32 @@ export const useAuth = () => {
         throw new Error(data.message || "Login failed");
       }
 
+      // Log the full API response for debugging
+
       // Extract user data and tokens from response
       // Structure: data.data.user, data.data.token, data.data.refreshToken
+      // Try multiple possible field names for promoterId
+      const promoterId = 
+        data.data.user.PromoterId ||  // API uses this!
+        data.data.user.promoterId || 
+        data.data.user.promoter_id || 
+        data.data.user.PromoterID ||
+        data.data.user.promoter_ID ||
+        data.data.user.venue_id ||
+        data.data.user.venueId ||
+        data.data.user.VenueID ||
+        undefined;
+
       const user: User = {
         id: data.data.user.id,
         email: data.data.user.email,
         name: data.data.user.name,
         phone: data.data.user.phone || undefined,
         avatar: data.data.user.avatar || undefined,
+        PromoterId: data.data.user.PromoterId || undefined,  // Save original field
+        promoterId: promoterId,  // Save normalized field
       };
+
       const token = data.data.token;
       const refreshToken = data.data.refreshToken;
 
@@ -152,11 +172,19 @@ export const useAuth = () => {
       try {
         const deviceToken = await getDeviceToken();
         if (deviceToken) {
-          const { registerToken } = await import('@/lib/api');
+          const { registerToken } = await import("@/lib/api");
           await registerToken(deviceToken);
         }
       } catch (error) {
         // Don't block login if token registration fails
+      }
+
+      // Reload the app to refresh admin controls and all data
+      try {
+        await Updates.reloadAsync();
+      } catch (error) {
+        // In development, Updates.reloadAsync() is not available
+        // The app state will still update normally
       }
 
       return true;

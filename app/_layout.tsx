@@ -1,14 +1,20 @@
 import { AddPaymentPrompt } from "@/components/add-payment-prompt";
 import { BuybackNotification } from "@/components/buyback-notification";
 import { BuybackSuccessModal } from "@/components/buyback-success-modal";
+import { NotificationDetailBottomSheet } from "@/components/notification-detail-bottom-sheet";
 import { AdminProvider } from "@/contexts/AdminContext";
 import { BuybackProvider } from "@/contexts/BuybackContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
+import { useLocationPermission } from "@/hooks/useLocationPermission";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { verifyConfiguration } from "@/lib/verifyConfig";
+import BottomSheetLib from "@gorhom/bottom-sheet";
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
 import "../global.css";
@@ -35,6 +41,18 @@ export default function RootLayout() {
   const { nativePushToken, devicePushToken, notification, error } =
     usePushNotifications();
 
+  // Initialize location permissions
+  const { requestPermission } = useLocationPermission();
+
+  // Ref for notification bottom sheet
+  const notificationSheetRef = useRef<BottomSheetLib>(null);
+  const [selectedNotificationId, setSelectedNotificationId] = useState<
+    string | null
+  >(null);
+
+  // Track if we've checked for last notification response
+  const [hasCheckedLastResponse, setHasCheckedLastResponse] = useState(false);
+
   useEffect(() => {
     // Verify configuration on app start (only in development)
     if (__DEV__) {
@@ -43,7 +61,47 @@ export default function RootLayout() {
         verifyConfiguration();
       }, 2000);
     }
+
+    // Request location permission on app load
+    requestPermission();
   }, []);
+
+  // Check for notification that opened the app (when app was killed)
+  useEffect(() => {
+    if (!hasCheckedLastResponse) {
+      console.log(
+        "[NOTIFICATION] 🔍 Checking for last notification response...",
+      );
+
+      Notifications.getLastNotificationResponseAsync()
+        .then((response) => {
+          if (response) {
+            console.log("[NOTIFICATION] 📬 Found last notification response!");
+            console.log(
+              "[NOTIFICATION] 📦 Response:",
+              JSON.stringify(response, null, 2),
+            );
+
+            const data = response.notification.request.content.data;
+            console.log(
+              "[NOTIFICATION] 📦 Data:",
+              JSON.stringify(data, null, 2),
+            );
+
+            handleNotificationData(data);
+          } else {
+            console.log(
+              "[NOTIFICATION] ℹ️ No last notification response found",
+            );
+          }
+          setHasCheckedLastResponse(true);
+        })
+        .catch((err) => {
+          console.error("[NOTIFICATION] ❌ Error checking last response:", err);
+          setHasCheckedLastResponse(true);
+        });
+    }
+  }, [hasCheckedLastResponse]);
 
   useEffect(() => {
     if (nativePushToken) {
@@ -61,39 +119,124 @@ export default function RootLayout() {
     }
   }, [nativePushToken, devicePushToken, error]);
 
+  // Handle notification data extraction and opening bottom sheet
+  const handleNotificationData = (notificationData: any) => {
+    console.log("[NOTIFICATION] 🔍 Processing notification data...");
+    console.log(
+      "[NOTIFICATION] 📦 Full notification data:",
+      JSON.stringify(notificationData, null, 2),
+    );
+    console.log(
+      "[NOTIFICATION] 📦 Available keys:",
+      Object.keys(notificationData),
+    );
+
+    // Try multiple possible field names for the notification ID
+    // Check all common variations of field names
+    const notificationId =
+      notificationData?.notificationId ||
+      notificationData?.NotificationID ||
+      notificationData?.notification_id ||
+      notificationData?.NOTIFICATIONID ||
+      notificationData?.id ||
+      notificationData?.ID ||
+      notificationData?.alertId ||
+      notificationData?.AlertID ||
+      notificationData?.alert_id ||
+      notificationData?.ALERTID ||
+      notificationData?.orderId ||
+      notificationData?.OrderID ||
+      notificationData?.order_id ||
+      notificationData?.orderid;
+
+    if (notificationId) {
+      console.log("[NOTIFICATION] ✅ Found notification ID:", notificationId);
+
+      // Convert to string safely - handle objects, numbers, etc.
+      let idString: string;
+      if (typeof notificationId === "object") {
+        idString = JSON.stringify(notificationId);
+      } else if (typeof notificationId === "string") {
+        idString = notificationId;
+      } else {
+        idString = String(notificationId);
+      }
+
+      console.log("[NOTIFICATION] 📝 ID as string:", idString);
+      setSelectedNotificationId(idString);
+
+      // Open the bottom sheet with a delay to ensure ref is ready
+      setTimeout(() => {
+        console.log("[NOTIFICATION] 🔼 Attempting to open bottom sheet...");
+        if (notificationSheetRef.current) {
+          console.log("[NOTIFICATION] ✅ Bottom sheet ref exists, opening...");
+          notificationSheetRef.current.snapToIndex(2);
+          console.log("[NOTIFICATION] ✅ Bottom sheet opened to index 2");
+        } else {
+          console.error("[NOTIFICATION] ❌ Bottom sheet ref is null!");
+        }
+      }, 500); // Increased delay to 500ms
+    } else {
+      console.warn("[NOTIFICATION] ⚠️ No notification ID found in data");
+      console.warn(
+        "[NOTIFICATION] 📦 Received keys:",
+        Object.keys(notificationData),
+      );
+      console.warn(
+        "[NOTIFICATION] 📦 Full data:",
+        JSON.stringify(notificationData, null, 2),
+      );
+    }
+  };
+
+  // Handle notification from usePushNotifications hook
   useEffect(() => {
     if (notification) {
-      console.log("🔔 New notification:", notification);
-      // Handle notification here (show alert, navigate, etc.)
+      console.log(
+        "[NOTIFICATION] 🔔 Notification received in _layout:",
+        notification,
+      );
+
+      // Extract notification data
+      const notificationData = notification.request.content.data || {};
+
+      // Log the full content for debugging
+      console.log(
+        "[NOTIFICATION] 📋 Title:",
+        notification.request.content.title,
+      );
+      console.log("[NOTIFICATION] 📋 Body:", notification.request.content.body);
+
+      handleNotificationData(notificationData);
     }
   }, [notification]);
 
   return (
-    <AdminProvider>
-      <BuybackProvider>
-        <ThemeProvider value={customDarkTheme}>
-          <Stack>
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="event/[id]"
-              options={{ headerShown: false, presentation: "card" }}
-            />
-            <Stack.Screen
-              name="promoter/[id]"
-              options={{ headerShown: false, presentation: "card" }}
-            />
-            <Stack.Screen
-              name="modal"
-              options={{ presentation: "modal", title: "Modal" }}
-            />
-          </Stack>
-          <BuybackNotification />
-          <BuybackSuccessModal />
-          <AddPaymentPrompt />
-          <StatusBar style="light" />
-        </ThemeProvider>
-      </BuybackProvider>
-    </AdminProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AdminProvider>
+        <BuybackProvider>
+          <NotificationProvider>
+            <ThemeProvider value={customDarkTheme}>
+              <Stack>
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              </Stack>
+              <BuybackNotification />
+              <BuybackSuccessModal />
+              <AddPaymentPrompt />
+              <NotificationDetailBottomSheet
+                ref={notificationSheetRef}
+                notificationId={selectedNotificationId}
+                onClose={() => {
+                  console.log("[NOTIFICATION] 🔽 Bottom sheet closed");
+                  setSelectedNotificationId(null);
+                }}
+              />
+              <StatusBar style="light" />
+            </ThemeProvider>
+          </NotificationProvider>
+        </BuybackProvider>
+      </AdminProvider>
+    </GestureHandlerRootView>
   );
 }

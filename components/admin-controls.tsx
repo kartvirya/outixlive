@@ -1,48 +1,54 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { Lock, LockOpen, Palette, Bell } from 'lucide-react-native';
-import { useAdmin } from '@/contexts/AdminContext';
-import { AdminAccessModal } from './admin-access-modal';
-import { ColorPickerPopover } from './color-picker-popover';
-import { CreateNotificationModal } from './create-notification-modal';
+import { useAdmin } from "@/contexts/AdminContext";
+import { useAuth } from "@/hooks/useAuth";
+import { Palette } from "lucide-react-native";
+import React, { useState } from "react";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { AdminAccessModal } from "./admin-access-modal";
+import { ColorPickerPopover } from "./color-picker-popover";
 
 interface AdminControlsProps {
   onAddClick?: () => void;
-  variant?: 'header' | 'floating' | 'glass';
+  variant?: "header" | "floating" | "glass";
   themeColor?: string;
   onThemeColorChange?: (color: string) => void;
-  notificationTarget?: string;
-  eventId?: string;
   promoterId?: string;
 }
 
 export const AdminControls = ({
   onAddClick,
-  variant = 'header',
+  variant = "header",
   themeColor,
   onThemeColorChange,
-  notificationTarget,
-  eventId,
   promoterId,
 }: AdminControlsProps) => {
-  const { isAdmin, setIsAdmin } = useAdmin();
+  const { isAdmin, setIsAdmin, canAccessPromoter, canAccessEvent } = useAdmin();
+  const { user } = useAuth(); // Get user state to check if signed in
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showNotificationModal, setShowNotificationModal] = useState(false);
 
-  const handleLockClick = () => {
-    if (isAdmin) {
-      // Show message that admin is already logged in
-      Alert.alert(
-        'Admin Access',
-        'You are already logged in as admin.',
-        [{ text: 'OK' }]
-      );
-    } else {
-      // Only open modal if admin is NOT logged in
-      setShowAdminModal(true);
-    }
-  };
+  // User must be signed in to have admin access
+  const isSignedIn = !!user;
+
+  console.log("[ADMIN-CONTROLS] 🎛️ Component props:", {
+    promoterId,
+    isSignedIn,
+    isAdmin,
+  });
+
+  // Check if user has access to this promoter
+  const hasResourceAccess = promoterId ? canAccessPromoter(promoterId) : false;
+
+  console.log("[ADMIN-CONTROLS] 🔐 Final access:", {
+    isSignedIn,
+    isAdmin,
+    hasResourceAccess,
+    promoterId,
+  });
+
+  const hasAdminAccess = isSignedIn && isAdmin && hasResourceAccess;
+
+  console.log("[ADMIN-CONTROLS] 🎨 hasAdminAccess:", hasAdminAccess);
+  console.log("[ADMIN-CONTROLS] 🎨 Should show button:", hasAdminAccess && !!onThemeColorChange);
 
   const handleAdminSuccess = () => {
     setShowAdminModal(false);
@@ -60,12 +66,12 @@ export const AdminControls = ({
       width: 36,
       height: 36,
       borderRadius: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     };
 
-    if (isAdmin) {
-      return { ...base, backgroundColor: '#22c55e' };
+    if (hasAdminAccess) {
+      return { ...base, backgroundColor: "#22c55e" };
     }
     return base;
   };
@@ -73,61 +79,47 @@ export const AdminControls = ({
   return (
     <>
       <View style={styles.container}>
-        {/* Push Notification button - only shows when admin is unlocked */}
-        {isAdmin && notificationTarget && (
-          <TouchableOpacity
-            style={getButtonStyle()}
-            onPress={() => setShowNotificationModal(true)}
-          >
-            <Bell size={16} color={isAdmin ? '#0a0a0a' : '#fafafa'} />
-          </TouchableOpacity>
-        )}
-
-        {/* Color picker button - only shows when admin is unlocked */}
-        {isAdmin && onThemeColorChange && (
+        {/* Show color picker button when admin has access */}
+        {hasAdminAccess && onThemeColorChange && (
           <ColorPickerPopover
             isOpen={showColorPicker}
             onOpenChange={setShowColorPicker}
-            currentColor={themeColor || '160 84% 39%'}
+            currentColor={themeColor || "160 84% 39%"}
             onColorChange={handleColorChange}
           >
-            <TouchableOpacity 
+            <TouchableOpacity
               style={getButtonStyle()}
               onPress={() => setShowColorPicker(true)}
             >
-              <Palette size={16} color={isAdmin ? '#0a0a0a' : '#fafafa'} />
+              <Palette
+                size={16}
+                color={hasAdminAccess ? "#0a0a0a" : "#fafafa"}
+              />
             </TouchableOpacity>
           </ColorPickerPopover>
         )}
-
-        {/* Lock button */}
-        <TouchableOpacity style={getButtonStyle()} onPress={handleLockClick}>
-          {isAdmin ? (
-            <LockOpen size={16} color="#0a0a0a" />
-          ) : (
-            <Lock size={16} color="#fafafa" />
-          )}
-        </TouchableOpacity>
+        
+        {/* Show disabled/locked button when signed in, admin, but no resource access */}
+        {isSignedIn && isAdmin && !hasResourceAccess && onThemeColorChange && promoterId && (
+          <TouchableOpacity
+            style={[getButtonStyle(), { opacity: 0.5 }]}
+            disabled={true}
+          >
+            <Palette
+              size={16}
+              color="#fafafa"
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Only show modal if admin is NOT logged in */}
-      {!isAdmin && (
+      {/* Only show modal if signed in but admin is NOT logged in */}
+      {isSignedIn && !isAdmin && (
         <AdminAccessModal
           isOpen={showAdminModal}
           onClose={() => setShowAdminModal(false)}
           onSuccess={handleAdminSuccess}
           actionType="manage"
-        />
-      )}
-
-      {notificationTarget && (
-        <CreateNotificationModal
-          isOpen={showNotificationModal}
-          onClose={() => setShowNotificationModal(false)}
-          promoterName={promoterId ? notificationTarget : undefined}
-          eventName={eventId ? notificationTarget : undefined}
-          eventId={eventId}
-          promoterId={promoterId}
         />
       )}
     </>
@@ -136,8 +128,8 @@ export const AdminControls = ({
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
 });

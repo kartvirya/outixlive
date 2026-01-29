@@ -1,5 +1,7 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -36,7 +38,8 @@ export function distanceKm(a: LatLng, b: LatLng): number {
 }
 
 /**
- * Best-effort location getter (works on web; may be unavailable on native without extra deps/permissions).
+ * Get user's current location with proper permission handling.
+ * Works on both web and native (iOS/Android) using Expo Location.
  */
 export async function getBrowserLocation(options?: {
   timeoutMs?: number;
@@ -47,20 +50,45 @@ export async function getBrowserLocation(options?: {
   const enableHighAccuracy = options?.enableHighAccuracy ?? true;
   const maximumAgeMs = options?.maximumAgeMs ?? 300000;
 
-  if (typeof navigator === 'undefined' || !navigator.geolocation) {
-    throw new Error('Geolocation is not available on this device.');
+  // On web, use the browser's geolocation API
+  if (Platform.OS === 'web') {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      throw new Error('Geolocation is not available on this device.');
+    }
+
+    return await new Promise<LatLng>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          resolve({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+        },
+        (err) => reject(new Error(err.message || 'Failed to get location.')),
+        { timeout: timeoutMs, enableHighAccuracy, maximumAge: maximumAgeMs },
+      );
+    });
   }
 
-  return await new Promise<LatLng>((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        resolve({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-        });
-      },
-      (err) => reject(new Error(err.message || 'Failed to get location.')),
-      { timeout: timeoutMs, enableHighAccuracy, maximumAge: maximumAgeMs },
-    );
+  // On native (iOS/Android), use Expo Location
+  // Check if permission is granted
+  const { status } = await Location.getForegroundPermissionsAsync();
+  
+  if (status !== Location.PermissionStatus.GRANTED) {
+    // Request permission
+    const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+    if (newStatus !== Location.PermissionStatus.GRANTED) {
+      throw new Error('Location permission denied. Please enable location access in your device settings.');
+    }
+  }
+
+  // Get current location
+  const location = await Location.getCurrentPositionAsync({
+    accuracy: enableHighAccuracy ? Location.Accuracy.High : Location.Accuracy.Balanced,
   });
+
+  return {
+    latitude: location.coords.latitude,
+    longitude: location.coords.longitude,
+  };
 }

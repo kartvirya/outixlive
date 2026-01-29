@@ -36,7 +36,6 @@ export default function AWSSNSTestScreen() {
     const logEntry = `[${timestamp}] ${message}`;
     setLogs((prev) => [...prev, logEntry]);
     setStatus(message);
-    console.log(logEntry);
   };
 
   const clearLogs = () => {

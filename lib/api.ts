@@ -182,9 +182,15 @@ export const getDeviceToken = async (): Promise<string | null> => {
   try {
     // Use the same device token from deviceToken.ts (iOS APNs token from Apple)
     const token = await getDeviceTokenFromStorage();
+    console.log(
+      "[API] ✅ Device token retrieved:",
+      token ? `${token.substring(0, 20)}...` : "NULL",
+    );
     return token;
   } catch (error) {
-    console.error("[API] Error getting device token:", error);
+    // Device token not available yet - this is normal on first launch
+    console.error("[API] ❌ Failed to retrieve device token:", error);
+    // Return null instead of throwing to allow API calls to proceed without it
     return null;
   }
 };
@@ -278,7 +284,9 @@ export const apiRequest = async (
   }
 
   if (deviceToken) {
-    headers["DeviceToken"] = deviceToken;
+    headers["devicetoken"] = deviceToken; // Server expects lowercase
+  } else {
+    console.warn(`[API] ⚠️ Device token not available for ${endpoint}`);
   }
 
   return fetch(`${BASE_URL}${endpoint}`, {
@@ -444,6 +452,9 @@ export const registerToken = async (deviceToken: string) => {
       headers["Authorization"] = `Bearer ${authToken}`;
     }
 
+    // Add devicetoken header (lowercase - server expectation)
+    headers["devicetoken"] = deviceToken;
+
     const url = `${BASE_URL}/registertoken/${deviceToken}`;
 
     const response = await fetch(url, {
@@ -505,12 +516,27 @@ export const registerToken = async (deviceToken: string) => {
  * DeviceToken is optional
  */
 export const getPromoters = async () => {
+  console.log("[GET PROMOTERS] 🔍 Getting device token...");
   const deviceToken = await getDeviceToken();
+  console.log(
+    "[GET PROMOTERS] 📱 Device token result:",
+    deviceToken ? `${deviceToken.substring(0, 20)}...` : "NULL",
+  );
+
   const sessionCookie = await getSessionCookie();
+  console.log(
+    "[GET PROMOTERS] 🍪 Session cookie:",
+    sessionCookie ? "Present" : "NULL",
+  );
 
   const headers: Record<string, string> = {};
   if (deviceToken) {
-    headers["DeviceToken"] = deviceToken;
+    headers["devicetoken"] = deviceToken; // Server expects lowercase
+    console.log("[GET PROMOTERS] ✅ Added devicetoken header");
+  } else {
+    console.error(
+      "[GET PROMOTERS] ❌ NO DEVICE TOKEN - Headers will not include devicetoken!",
+    );
   }
   // Send Cookie header if session cookie exists (required for subscription status)
   if (sessionCookie) {
@@ -518,6 +544,11 @@ export const getPromoters = async () => {
   }
 
   const url = `${BASE_URL}/promoters`;
+
+  console.log("[GET PROMOTERS] 📤 Request:", {
+    url,
+    headers,
+  });
 
   const response = await fetch(url, {
     method: "GET",
@@ -548,13 +579,18 @@ export const getPromoters = async () => {
 /**
  * Get promoter details
  * GET /promoters/{id}
+ * Returns: { info: {...promoter details}, msg: [...events] }
  */
 export const getPromoterDetails = async (id: string) => {
   const deviceToken = await getDeviceToken();
 
   const headers: Record<string, string> = {};
   if (deviceToken) {
-    headers["DeviceToken"] = deviceToken;
+    headers["devicetoken"] = deviceToken; // Server expects lowercase
+  } else {
+    console.warn(
+      `[API] ⚠️ Device token not available for getPromoterDetails(${id})`,
+    );
   }
 
   const url = `${BASE_URL}/promoters/${id}`;
@@ -581,144 +617,21 @@ export const getPromoterDetails = async (id: string) => {
     throw new Error("Invalid JSON response from promoter details API");
   }
 
-  // The API returns events, not promoter details. We need to:
-  // 1. Extract promoter info from events
-  // 2. Get subscription status from /promoters list endpoint
+  // The new API returns:
+  // - info: promoter details
+  // - msg: array of events for this promoter
 
-  let p = null;
-
-  // Extract promoter info from events array
-  if (data?.msg && Array.isArray(data.msg) && data.msg.length > 0) {
-    const firstEvent = data.msg[0];
-    if (firstEvent && typeof firstEvent === "object") {
-      // Build promoter object from event data
-      p = {
-        id: firstEvent.promoterId || id,
-        name: firstEvent.promoterName || firstEvent.venuename || "",
-        logo: firstEvent.venuelogo || "",
-        coverImage: firstEvent.coverImage || "",
-        brandColor: firstEvent.brandColor || "#006699",
-        latitude: firstEvent.latitude || "0",
-        longitude: firstEvent.longitude || "0",
-        address: firstEvent.address || "",
-        // Don't use isSubscribed from events - it's for EVENT subscription, not PROMOTER
-        // We'll get it from the promoters list below
-      };
-    }
-  } else if (
-    data?.msg &&
-    typeof data.msg === "object" &&
-    !Array.isArray(data.msg)
-  ) {
-    // If msg is an object (promoter details), use it directly
-    if (
-      data.msg.name ||
-      data.msg.promoterName ||
-      data.msg.id ||
-      data.msg.venuename
-    ) {
-      p = data.msg;
-    }
-  }
-
-  // If not found in msg, try other paths
-  if (!p) {
-    const possiblePaths = [
-      data?.promoter,
-      data?.data,
-      data?.data?.promoter,
-      data?.data?.msg,
-      data,
-    ];
-
-    for (const path of possiblePaths) {
-      if (path && typeof path === "object" && !Array.isArray(path)) {
-        if (
-          path.name ||
-          path.promoterName ||
-          path.id ||
-          path.venuename ||
-          path.venue_name
-        ) {
-          p = path;
-          break;
-        }
-      }
-    }
-  }
-
-  // ALWAYS get isSubscribed from the promoters list endpoint
-  // The /promoters/{id} endpoint returns events, not promoter subscription status
-  if (p && id) {
-    try {
-      const promotersData = await getPromoters();
-      const promoters = Array.isArray(promotersData)
-        ? promotersData
-        : promotersData?.msg || [];
-      const matchingPromoter = promoters.find((prom: any) => {
-        const promId = String(prom.id || "");
-        const searchId = String(id || "");
-        return promId === searchId || promId === String(p.id || "");
-      });
-
-      if (matchingPromoter) {
-        // Use the parseIsSubscribed utility function
-        p.isSubscribed = parseIsSubscribed(matchingPromoter.isSubscribed);
-
-        // Also update other promoter fields if they're missing
-        if (!p.name && matchingPromoter.name) p.name = matchingPromoter.name;
-        if (!p.logo && matchingPromoter.logo) p.logo = matchingPromoter.logo;
-        if (!p.coverImage && matchingPromoter.coverImage)
-          p.coverImage = matchingPromoter.coverImage;
-        if (!p.brandColor && matchingPromoter.brandColor)
-          p.brandColor = matchingPromoter.brandColor;
-        if (!p.eventCount && matchingPromoter.eventCount)
-          p.eventCount = matchingPromoter.eventCount;
-      } else {
-        p.isSubscribed = false; // Default to false if not found
-      }
-    } catch (err) {
-      console.error(
-        "[PROMOTER DETAILS API] Failed to fetch promoters list:",
-        err,
-      );
-      p.isSubscribed = false; // Default to false on error
-    }
-  }
-
-  if (!p) {
+  if (!data?.info) {
     console.error(
-      "[PROMOTER DETAILS API] Could not find promoter data in response",
-    );
-    console.error(
-      "[PROMOTER DETAILS API] 📋 Top-level keys:",
+      "[PROMOTER DETAILS API] No 'info' field in response. Keys:",
       Object.keys(data || {}),
     );
-    console.error(
-      "[PROMOTER DETAILS API] 📋 msg type:",
-      typeof data?.msg,
-      Array.isArray(data?.msg) ? "(array)" : "(not array)",
-    );
-    if (data?.msg) {
-      if (Array.isArray(data.msg)) {
-        console.error(
-          "[PROMOTER DETAILS API] 📋 msg array length:",
-          data.msg.length,
-        );
-        if (data.msg.length > 0) {
-          console.error(
-            "[PROMOTER DETAILS API] 📋 First item in msg array keys:",
-            Object.keys(data.msg[0] || {}),
-          );
-        }
-      } else {
-        console.error(
-          "[PROMOTER DETAILS API] 📋 msg object keys:",
-          Object.keys(data.msg),
-        );
-      }
-    }
+    throw new Error("Invalid response structure: missing 'info' field");
   }
+
+  // Parse isSubscribed field
+  const promoterInfo = data.info;
+  promoterInfo.isSubscribed = parseIsSubscribed(promoterInfo.isSubscribed);
 
   return data;
 };
@@ -729,12 +642,22 @@ export const getPromoterDetails = async (id: string) => {
  */
 export const subscribeToPromoter = async (id: string) => {
   try {
+    console.log("[SUBSCRIBE API] 🔍 Getting device token...");
     const deviceToken = await getDeviceToken();
+    console.log(
+      "[SUBSCRIBE API] 📱 Device token result:",
+      deviceToken ? `${deviceToken.substring(0, 20)}...` : "NULL",
+    );
 
     const myHeaders = new Headers();
-    // Send DeviceToken in header
+    // Send devicetoken in header (lowercase - server expectation)
     if (deviceToken) {
-      myHeaders.append("DeviceToken", deviceToken);
+      myHeaders.append("devicetoken", deviceToken);
+      console.log("[SUBSCRIBE API] ✅ Added devicetoken header");
+    } else {
+      console.error(
+        "[SUBSCRIBE API] ❌ NO DEVICE TOKEN - Headers will not include devicetoken!",
+      );
     }
 
     const url = `${BASE_URL}/promoters/subscribe/${id}`;
@@ -778,6 +701,10 @@ export const subscribeToPromoter = async (id: string) => {
     try {
       data = JSON.parse(responseText);
       console.log("[SUBSCRIBE API] ✅ Parsed Response:", data);
+      console.log(
+        "[SUBSCRIBE API] 🎉 Subscription successful for promoter:",
+        id,
+      );
     } catch {
       // If not JSON, return the text
       data = responseText as any;
@@ -804,9 +731,9 @@ export const unsubscribeFromPromoter = async (id: string) => {
     const deviceToken = await getDeviceToken();
 
     const myHeaders = new Headers();
-    // Send DeviceToken in header
+    // Send devicetoken in header (lowercase - server expectation)
     if (deviceToken) {
-      myHeaders.append("DeviceToken", deviceToken);
+      myHeaders.append("devicetoken", deviceToken);
     }
 
     const formdata = new FormData();
@@ -900,18 +827,38 @@ export const getPromoterAlerts = async (id: string) => {
  */
 export const getMyAlerts = async () => {
   try {
+    console.log("[MY ALERTS] 🔍 Getting device token...");
     const deviceToken = await getDeviceToken();
+    console.log(
+      "[MY ALERTS] 📱 Device token result:",
+      deviceToken ? `${deviceToken.substring(0, 20)}...` : "NULL",
+    );
+
     const sessionCookie = await getSessionCookie();
+    console.log(
+      "[MY ALERTS] 🍪 Session cookie:",
+      sessionCookie ? "Present" : "NULL",
+    );
 
     const myHeaders = new Headers();
-    // Send DeviceToken in header
+    // Send devicetoken in header (lowercase - server expectation)
     if (deviceToken) {
-      myHeaders.append("DeviceToken", deviceToken);
+      myHeaders.append("devicetoken", deviceToken);
+      console.log("[MY ALERTS] ✅ Added devicetoken header");
+    } else {
+      console.error(
+        "[MY ALERTS] ❌ NO DEVICE TOKEN - Headers will not include devicetoken!",
+      );
     }
     // Send Cookie in header
     if (sessionCookie) {
       myHeaders.append("Cookie", sessionCookie);
     }
+
+    console.log(
+      "[MY ALERTS] 📤 Request headers:",
+      Object.fromEntries(myHeaders.entries()),
+    );
 
     const formdata = new FormData();
 
@@ -944,6 +891,72 @@ export const getMyAlerts = async () => {
 };
 
 /**
+ * Get specific alert details by notification ID
+ * POST /myalerts/{notificationId}
+ */
+export const getAlertDetails = async (notificationId: string) => {
+  try {
+    console.log("[API] 📥 Fetching alert details for:", notificationId);
+
+    const deviceToken = await getDeviceToken();
+    const sessionCookie = await getSessionCookie();
+
+    const myHeaders = new Headers();
+    // Send devicetoken in header (lowercase - server expectation)
+    if (deviceToken) {
+      myHeaders.append("devicetoken", deviceToken);
+      console.log("[API] ✅ Device token added to headers");
+    } else {
+      console.warn("[API] ⚠️ Device token not available for getAlertDetails");
+    }
+    // Send Cookie in header
+    if (sessionCookie) {
+      myHeaders.append("Cookie", sessionCookie);
+      console.log("[API] ✅ Session cookie added to headers");
+    }
+
+    const formdata = new FormData();
+
+    const requestOptions: RequestInit = {
+      method: "POST",
+      headers: myHeaders,
+      body: formdata,
+      redirect: "follow",
+    };
+
+    console.log("[API] 🌐 Calling:", `${BASE_URL}/myalerts/${notificationId}`);
+    const response = await fetch(
+      `${BASE_URL}/myalerts/${notificationId}`,
+      requestOptions,
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(
+        "[API] ❌ Failed to fetch alert details:",
+        response.status,
+        errorText,
+      );
+      throw new Error(
+        `Failed to fetch alert details: ${response.status} - ${errorText}`,
+      );
+    }
+
+    const parsed = await parseApiResponse(response);
+    console.log("[API] ✅ Alert details fetched successfully");
+    return parsed;
+  } catch (error) {
+    console.error("[API] ❌ Error in getAlertDetails:", error);
+    if (error instanceof TypeError && error.message === "Failed to fetch") {
+      throw new Error(
+        "Network error: Unable to connect to server. Please check your connection.",
+      );
+    }
+    throw error;
+  }
+};
+
+/**
  * Mark an alert as read
  * POST /myalerts/read/{notificationId}
  */
@@ -953,9 +966,12 @@ export const markAlertAsRead = async (notificationId: string) => {
     const sessionCookie = await getSessionCookie();
 
     const myHeaders = new Headers();
-    // Send DeviceToken in header
+    // Send DeviceToken in header (both variations for compatibility)
     if (deviceToken) {
       myHeaders.append("DeviceToken", deviceToken);
+      myHeaders.append("devicetoken", deviceToken); // Server might expect lowercase
+    } else {
+      console.warn("[API] ⚠️ Device token not available for markAlertAsRead");
     }
     // Send Cookie in header
     if (sessionCookie) {
@@ -1191,7 +1207,7 @@ export const getEvents = async () => {
 
   const headers: Record<string, string> = {};
   if (deviceToken) {
-    headers["DeviceToken"] = deviceToken;
+    headers["devicetoken"] = deviceToken; // Server expects lowercase
   }
 
   const response = await fetch(`${BASE_URL}/listevents`, {
@@ -1215,12 +1231,22 @@ export const getEvents = async () => {
  */
 export const subscribeToEvent = async (id: string) => {
   try {
+    console.log("[SUBSCRIBE EVENT] 🔍 Getting device token...");
     const deviceToken = await getDeviceToken();
+    console.log(
+      "[SUBSCRIBE EVENT] 📱 Device token result:",
+      deviceToken ? `${deviceToken.substring(0, 20)}...` : "NULL",
+    );
 
     const myHeaders = new Headers();
-    // Send DeviceToken in header
+    // Send devicetoken in header (lowercase - server expectation)
     if (deviceToken) {
-      myHeaders.append("DeviceToken", deviceToken);
+      myHeaders.append("devicetoken", deviceToken);
+      console.log("[SUBSCRIBE EVENT] ✅ Added devicetoken header");
+    } else {
+      console.error(
+        "[SUBSCRIBE EVENT] ❌ NO DEVICE TOKEN - Headers will not include devicetoken!",
+      );
     }
 
     const requestOptions: RequestInit = {
@@ -1228,6 +1254,12 @@ export const subscribeToEvent = async (id: string) => {
       headers: myHeaders,
       redirect: "follow",
     };
+
+    console.log("[SUBSCRIBE EVENT] 📤 Request:", {
+      url: `${BASE_URL}/listevents/subscribe/${id}`,
+      deviceToken: deviceToken ? `${deviceToken.substring(0, 20)}...` : "NULL",
+      headers: Object.fromEntries(myHeaders.entries()),
+    });
 
     const response = await fetch(
       `${BASE_URL}/listevents/subscribe/${id}`,
@@ -1430,9 +1462,9 @@ export const unsubscribeFromEvent = async (id: string) => {
   try {
     const deviceToken = await getDeviceToken();
     const myHeaders = new Headers();
-    // Send DeviceToken in header
+    // Send devicetoken in header (lowercase - server expectation)
     if (deviceToken) {
-      myHeaders.append("DeviceToken", deviceToken);
+      myHeaders.append("devicetoken", deviceToken);
     }
 
     const formdata = new FormData();

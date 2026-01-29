@@ -194,7 +194,13 @@ export function usePushNotifications(): UsePushNotificationsResult {
       (response) => {
         // Handle notification tap
         console.log("[PUSH] 👆 User tapped notification:", response);
-        // You can navigate to specific screens here based on notification data
+        
+        // Extract notification data
+        const notificationData = response.notification.request.content;
+        console.log("[PUSH] 📦 Notification data:", notificationData.data);
+        
+        // Pass the notification to state so _layout can handle showing the modal
+        setNotification(response.notification);
       },
     );
 

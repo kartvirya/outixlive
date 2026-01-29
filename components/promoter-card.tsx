@@ -13,6 +13,7 @@ interface PromoterCardProps {
   distance?: string;
   coverImage?: string;
   onPress?: () => void;
+  isAdminOwned?: boolean;
 }
 
 export const PromoterCard = ({
@@ -25,6 +26,7 @@ export const PromoterCard = ({
   distance,
   coverImage,
   onPress,
+  isAdminOwned = false,
 }: PromoterCardProps) => {
   // Normalize isSubscribed to handle string "1", number 1, or boolean true
   const isPromoterSubscribed =
@@ -32,7 +34,7 @@ export const PromoterCard = ({
 
   return (
     <AnimatedPressable
-      style={styles.card}
+      style={[styles.card, isAdminOwned && styles.adminOwnedCard]}
       onPress={onPress}
       animationType="lift"
       hapticStyle="medium"
@@ -88,6 +90,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 12,
     backgroundColor: "#111827",
+  },
+  adminOwnedCard: {
+    borderWidth: 2,
+    borderColor: "#22c55e",
   },
   backgroundImage: {
     position: "absolute",
