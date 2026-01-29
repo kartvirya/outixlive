@@ -120,7 +120,7 @@ export default function RootLayout() {
   }, [nativePushToken, devicePushToken, error]);
 
   // Handle notification data extraction and opening bottom sheet
-  const handleNotificationData = (notificationData: any) => {
+  const handleNotificationData = async (notificationData: any) => {
     console.log("[NOTIFICATION] 🔍 Processing notification data...");
     console.log(
       "[NOTIFICATION] 📦 Full notification data:",
@@ -131,53 +131,66 @@ export default function RootLayout() {
       Object.keys(notificationData),
     );
 
-    // Try multiple possible field names for the notification ID
-    // Check all common variations of field names
-    const notificationId =
-      notificationData?.notificationId ||
-      notificationData?.NotificationID ||
-      notificationData?.notification_id ||
-      notificationData?.NOTIFICATIONID ||
-      notificationData?.id ||
-      notificationData?.ID ||
-      notificationData?.alertId ||
-      notificationData?.AlertID ||
-      notificationData?.alert_id ||
-      notificationData?.ALERTID ||
-      notificationData?.orderId ||
-      notificationData?.OrderID ||
-      notificationData?.order_id ||
-      notificationData?.orderid;
+    // Extract notification type and message from the tapped notification
+    const notificationType = notificationData?.notification_type || notificationData?.type || "";
+    const notificationMessage = notificationData?.notification_message || notificationData?.message || notificationData?.body || "";
 
-    if (notificationId) {
-      console.log("[NOTIFICATION] ✅ Found notification ID:", notificationId);
+    console.log("[NOTIFICATION] 📋 Type:", notificationType);
+    console.log("[NOTIFICATION] 📋 Message:", notificationMessage);
 
-      // Convert to string safely - handle objects, numbers, etc.
-      let idString: string;
-      if (typeof notificationId === "object") {
-        idString = JSON.stringify(notificationId);
-      } else if (typeof notificationId === "string") {
-        idString = notificationId;
-      } else {
-        idString = String(notificationId);
-      }
+    if (notificationType || notificationMessage) {
+      console.log("[NOTIFICATION] 🔎 Fetching all alerts to find match...");
+      
+      try {
+        // Import getMyAlerts at the top of the file
+        const { getMyAlerts } = await import("@/lib/api");
+        const alertsResponse = await getMyAlerts();
+        
+        // Extract alerts from response
+        const alerts = Array.isArray(alertsResponse)
+          ? alertsResponse
+          : alertsResponse?.msg || alertsResponse?.alerts || [];
 
-      console.log("[NOTIFICATION] 📝 ID as string:", idString);
-      setSelectedNotificationId(idString);
+        console.log("[NOTIFICATION] 📦 Found", alerts.length, "total alerts");
 
-      // Open the bottom sheet with a delay to ensure ref is ready
-      setTimeout(() => {
-        console.log("[NOTIFICATION] 🔼 Attempting to open bottom sheet...");
-        if (notificationSheetRef.current) {
-          console.log("[NOTIFICATION] ✅ Bottom sheet ref exists, opening...");
-          notificationSheetRef.current.snapToIndex(2);
-          console.log("[NOTIFICATION] ✅ Bottom sheet opened to index 2");
+        // Find matching alert by notification_type and notification_message
+        const matchingAlert = alerts.find((alert: any) => {
+          const typeMatch = alert.notification_type === notificationType;
+          const messageMatch = alert.notification_message === notificationMessage || 
+                              alert.notification === notificationMessage;
+          
+          console.log("[NOTIFICATION] 🔍 Checking alert:", alert.NotificationID);
+          console.log("[NOTIFICATION]   Type match:", typeMatch, `(${alert.notification_type} === ${notificationType})`);
+          console.log("[NOTIFICATION]   Message match:", messageMatch);
+          
+          return typeMatch && messageMatch;
+        });
+
+        if (matchingAlert) {
+          console.log("[NOTIFICATION] ✅ Found matching alert:", matchingAlert.NotificationID);
+          setSelectedNotificationId(matchingAlert.NotificationID);
+
+          // Open the bottom sheet with a delay to ensure ref is ready
+          setTimeout(() => {
+            console.log("[NOTIFICATION] 🔼 Attempting to open bottom sheet...");
+            if (notificationSheetRef.current) {
+              console.log("[NOTIFICATION] ✅ Bottom sheet ref exists, opening...");
+              notificationSheetRef.current.snapToIndex(2);
+              console.log("[NOTIFICATION] ✅ Bottom sheet opened to index 2");
+            } else {
+              console.error("[NOTIFICATION] ❌ Bottom sheet ref is null!");
+            }
+          }, 500);
         } else {
-          console.error("[NOTIFICATION] ❌ Bottom sheet ref is null!");
+          console.warn("[NOTIFICATION] ⚠️ No matching alert found");
+          console.warn("[NOTIFICATION] 🔍 Searched for type:", notificationType);
+          console.warn("[NOTIFICATION] 🔍 Searched for message:", notificationMessage);
         }
-      }, 500); // Increased delay to 500ms
+      } catch (error) {
+        console.error("[NOTIFICATION] ❌ Error fetching alerts:", error);
+      }
     } else {
-      console.warn("[NOTIFICATION] ⚠️ No notification ID found in data");
+      console.warn("[NOTIFICATION] ⚠️ No notification type or message found in data");
       console.warn(
         "[NOTIFICATION] 📦 Received keys:",
         Object.keys(notificationData),
