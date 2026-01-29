@@ -53,6 +53,9 @@ export default function RootLayout() {
   // Track if we've checked for last notification response
   const [hasCheckedLastResponse, setHasCheckedLastResponse] = useState(false);
 
+  // Track processed notification IDs to prevent duplicate handling
+  const processedNotificationIds = useRef<Set<string>>(new Set());
+
   // Extract notification ID from data (supports multiple field names)
   const extractNotificationId = useCallback((data: any): string | null => {
     if (!data || typeof data !== "object") {
@@ -159,8 +162,10 @@ export default function RootLayout() {
 
   // Handle notification data extraction and opening bottom sheet
   const handleNotificationData = useCallback(
-    async (notificationData: any) => {
-      console.log("[NOTIFICATION] 🔍 Processing notification data...");
+    async (notificationData: any, source: string = "unknown") => {
+      console.log(
+        `[NOTIFICATION] 🔍 Processing notification data (source: ${source})...`,
+      );
       console.log(
         "[NOTIFICATION] 📦 Full notification data:",
         JSON.stringify(notificationData, null, 2),
@@ -174,6 +179,22 @@ export default function RootLayout() {
       const notificationId = extractNotificationId(notificationData);
 
       if (notificationId) {
+        // Check if we've already processed this notification to prevent duplicates
+        if (processedNotificationIds.current.has(notificationId)) {
+          console.log(
+            `[NOTIFICATION] ⏭️ Notification ${notificationId} already processed, skipping...`,
+          );
+          return;
+        }
+
+        // Mark as processed
+        processedNotificationIds.current.add(notificationId);
+
+        // Clear after 5 seconds to allow re-tapping if needed
+        setTimeout(() => {
+          processedNotificationIds.current.delete(notificationId);
+        }, 5000);
+
         console.log(
           "[NOTIFICATION] ✅ Using NotificationID directly:",
           notificationId,
@@ -292,39 +313,50 @@ export default function RootLayout() {
   }, []);
 
   // Check for notification that opened the app (when app was killed)
+  // This handles the case when app is completely closed and user taps notification
   useEffect(() => {
     if (!hasCheckedLastResponse) {
       console.log(
-        "[NOTIFICATION] 🔍 Checking for last notification response...",
+        "[NOTIFICATION] 🔍 Checking for last notification response (app was closed)...",
       );
 
-      Notifications.getLastNotificationResponseAsync()
-        .then((response) => {
-          if (response) {
-            console.log("[NOTIFICATION] 📬 Found last notification response!");
-            console.log(
-              "[NOTIFICATION] 📦 Response:",
-              JSON.stringify(response, null, 2),
-            );
+      // Add a small delay to ensure the app is fully mounted
+      const checkTimer = setTimeout(() => {
+        Notifications.getLastNotificationResponseAsync()
+          .then((response) => {
+            if (response) {
+              console.log(
+                "[NOTIFICATION] 📬 Found last notification response!",
+              );
+              console.log(
+                "[NOTIFICATION] 📦 Response:",
+                JSON.stringify(response, null, 2),
+              );
 
-            const data = response.notification.request.content.data;
-            console.log(
-              "[NOTIFICATION] 📦 Data:",
-              JSON.stringify(data, null, 2),
-            );
+              const data = response.notification.request.content.data;
+              console.log(
+                "[NOTIFICATION] 📦 Data:",
+                JSON.stringify(data, null, 2),
+              );
 
-            handleNotificationData(data);
-          } else {
-            console.log(
-              "[NOTIFICATION] ℹ️ No last notification response found",
+              handleNotificationData(data, "app-closed");
+            } else {
+              console.log(
+                "[NOTIFICATION] ℹ️ No last notification response found",
+              );
+            }
+            setHasCheckedLastResponse(true);
+          })
+          .catch((err) => {
+            console.error(
+              "[NOTIFICATION] ❌ Error checking last response:",
+              err,
             );
-          }
-          setHasCheckedLastResponse(true);
-        })
-        .catch((err) => {
-          console.error("[NOTIFICATION] ❌ Error checking last response:", err);
-          setHasCheckedLastResponse(true);
-        });
+            setHasCheckedLastResponse(true);
+          });
+      }, 300); // Small delay to ensure app is ready
+
+      return () => clearTimeout(checkTimer);
     }
   }, [hasCheckedLastResponse, handleNotificationData]);
 
@@ -344,7 +376,7 @@ export default function RootLayout() {
     }
   }, [nativePushToken, devicePushToken, error]);
 
-  // Handle notification from usePushNotifications hook
+  // Handle notification from usePushNotifications hook (for foreground/background taps)
   useEffect(() => {
     if (notification) {
       console.log(
@@ -362,7 +394,9 @@ export default function RootLayout() {
       );
       console.log("[NOTIFICATION] 📋 Body:", notification.request.content.body);
 
-      handleNotificationData(notificationData);
+      // Determine source based on notification state
+      const source = "app-open"; // App is already open (foreground/background)
+      handleNotificationData(notificationData, source);
     }
   }, [notification, handleNotificationData]);
 
