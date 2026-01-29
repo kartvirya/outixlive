@@ -1,20 +1,18 @@
 import { AddPaymentPrompt } from "@/components/add-payment-prompt";
 import { BuybackNotification } from "@/components/buyback-notification";
 import { BuybackSuccessModal } from "@/components/buyback-success-modal";
-import { NotificationDetailBottomSheet } from "@/components/notification-detail-bottom-sheet";
+import { NotificationPopupModal } from "@/components/notification-popup-modal";
 import { AdminProvider } from "@/contexts/AdminContext";
 import { BuybackProvider } from "@/contexts/BuybackContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { verifyConfiguration } from "@/lib/verifyConfig";
-import BottomSheetLib from "@gorhom/bottom-sheet";
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
@@ -61,11 +59,11 @@ export default function RootLayout() {
   // Initialize location permissions
   const { requestPermission } = useLocationPermission();
 
-  // Ref for notification bottom sheet
-  const notificationSheetRef = useRef<BottomSheetLib>(null);
+  // State for notification popup modal
   const [selectedNotificationId, setSelectedNotificationId] = useState<
     string | null
   >(null);
+  const [isPopupVisible, setIsPopupVisible] = useState(false);
 
   // Track if we've checked for last notification response
   const [hasCheckedLastResponse, setHasCheckedLastResponse] = useState(false);
@@ -164,73 +162,27 @@ export default function RootLayout() {
     [isNavigationReady, segments],
   );
 
-  // Helper function to open bottom sheet with retries - PRODUCTION READY
-  const openNotificationSheet = useCallback(
-    async (notificationId: string, retryCount = 0) => {
-      const maxRetries = 5;
-      const baseDelay = 300;
-      const delay = retryCount === 0 ? baseDelay : baseDelay * (retryCount + 1);
-
+  // Helper function to open notification popup modal
+  const openNotificationPopup = useCallback(
+    async (notificationId: string) => {
+      console.log("[NOTIFICATION] 🔼 Opening notification popup for:", notificationId);
+      
       // Wait for navigation to be ready first
-      if (retryCount === 0) {
-        const navReady = await waitForNavigationReady();
-        if (!navReady) {
-          console.warn(
-            "[NOTIFICATION] ⚠️ Navigation not ready, but proceeding anyway...",
-          );
-        }
+      const navReady = await waitForNavigationReady();
+      if (!navReady) {
+        console.warn(
+          "[NOTIFICATION] ⚠️ Navigation not ready, but proceeding anyway...",
+        );
       }
 
+      // Small delay to ensure UI is ready
       setTimeout(() => {
-        console.log(
-          `[NOTIFICATION] 🔼 Attempting to open bottom sheet (attempt ${retryCount + 1}/${maxRetries + 1})...`,
-        );
-        console.log(
-          `[NOTIFICATION] 📊 Navigation ready: ${isNavigationReady}, Segments: ${segments.length}`,
-        );
-
-        if (notificationSheetRef.current) {
-          try {
-            // Ensure we're on the main thread
-            if (Platform.OS === "ios") {
-              // iOS sometimes needs a small delay
-              setTimeout(() => {
-                notificationSheetRef.current?.snapToIndex(2);
-              }, 50);
-            } else {
-              notificationSheetRef.current.snapToIndex(2);
-            }
-            console.log("[NOTIFICATION] ✅ Bottom sheet opened successfully!");
-          } catch (error) {
-            console.error(
-              "[NOTIFICATION] ❌ Error opening bottom sheet:",
-              error,
-            );
-            if (retryCount < maxRetries) {
-              console.log(`[NOTIFICATION] 🔄 Retrying in ${delay}ms...`);
-              openNotificationSheet(notificationId, retryCount + 1);
-            } else {
-              console.error(
-                "[NOTIFICATION] ❌ Failed to open bottom sheet after all retries!",
-              );
-            }
-          }
-        } else {
-          console.warn(
-            `[NOTIFICATION] ⚠️ Bottom sheet ref is null (attempt ${retryCount + 1}/${maxRetries + 1})`,
-          );
-          if (retryCount < maxRetries) {
-            console.log(`[NOTIFICATION] 🔄 Retrying in ${delay}ms...`);
-            openNotificationSheet(notificationId, retryCount + 1);
-          } else {
-            console.error(
-              "[NOTIFICATION] ❌ Failed to open bottom sheet after all retries!",
-            );
-          }
-        }
-      }, delay);
+        setSelectedNotificationId(notificationId);
+        setIsPopupVisible(true);
+        console.log("[NOTIFICATION] ✅ Popup opened successfully!");
+      }, 300);
     },
-    [waitForNavigationReady, isNavigationReady, segments],
+    [waitForNavigationReady],
   );
 
   // Handle notification data extraction and opening bottom sheet
@@ -272,8 +224,7 @@ export default function RootLayout() {
           "[NOTIFICATION] ✅ Using NotificationID directly:",
           notificationId,
         );
-        setSelectedNotificationId(notificationId);
-        openNotificationSheet(notificationId);
+        openNotificationPopup(notificationId);
         return;
       }
 
@@ -333,8 +284,7 @@ export default function RootLayout() {
               "[NOTIFICATION] ✅ Found matching alert:",
               matchingAlert.NotificationID,
             );
-            setSelectedNotificationId(matchingAlert.NotificationID);
-            openNotificationSheet(matchingAlert.NotificationID);
+            openNotificationPopup(matchingAlert.NotificationID);
           } else {
             console.warn("[NOTIFICATION] ⚠️ No matching alert found");
             console.warn(
@@ -369,7 +319,7 @@ export default function RootLayout() {
         );
       }
     },
-    [extractNotificationId, openNotificationSheet],
+    [extractNotificationId, openNotificationPopup],
   );
 
   // Expose handleNotificationData globally for testing (ALWAYS - needed for test button)
@@ -544,11 +494,12 @@ export default function RootLayout() {
               <BuybackNotification />
               <BuybackSuccessModal />
               <AddPaymentPrompt />
-              <NotificationDetailBottomSheet
-                ref={notificationSheetRef}
+              <NotificationPopupModal
                 notificationId={selectedNotificationId}
+                visible={isPopupVisible}
                 onClose={() => {
-                  console.log("[NOTIFICATION] 🔽 Bottom sheet closed");
+                  console.log("[NOTIFICATION] 🔽 Popup closed");
+                  setIsPopupVisible(false);
                   setSelectedNotificationId(null);
                 }}
               />
