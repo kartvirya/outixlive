@@ -132,20 +132,25 @@ export default function RootLayout() {
     );
 
     // Extract notification type and message from the tapped notification
-    const notificationType = notificationData?.notification_type || notificationData?.type || "";
-    const notificationMessage = notificationData?.notification_message || notificationData?.message || notificationData?.body || "";
+    const notificationType =
+      notificationData?.notification_type || notificationData?.type || "";
+    const notificationMessage =
+      notificationData?.notification_message ||
+      notificationData?.message ||
+      notificationData?.body ||
+      "";
 
     console.log("[NOTIFICATION] 📋 Type:", notificationType);
     console.log("[NOTIFICATION] 📋 Message:", notificationMessage);
 
     if (notificationType || notificationMessage) {
       console.log("[NOTIFICATION] 🔎 Fetching all alerts to find match...");
-      
+
       try {
         // Import getMyAlerts at the top of the file
         const { getMyAlerts } = await import("@/lib/api");
         const alertsResponse = await getMyAlerts();
-        
+
         // Extract alerts from response
         const alerts = Array.isArray(alertsResponse)
           ? alertsResponse
@@ -156,25 +161,38 @@ export default function RootLayout() {
         // Find matching alert by notification_type and notification_message
         const matchingAlert = alerts.find((alert: any) => {
           const typeMatch = alert.notification_type === notificationType;
-          const messageMatch = alert.notification_message === notificationMessage || 
-                              alert.notification === notificationMessage;
-          
-          console.log("[NOTIFICATION] 🔍 Checking alert:", alert.NotificationID);
-          console.log("[NOTIFICATION]   Type match:", typeMatch, `(${alert.notification_type} === ${notificationType})`);
+          const messageMatch =
+            alert.notification_message === notificationMessage ||
+            alert.notification === notificationMessage;
+
+          console.log(
+            "[NOTIFICATION] 🔍 Checking alert:",
+            alert.NotificationID,
+          );
+          console.log(
+            "[NOTIFICATION]   Type match:",
+            typeMatch,
+            `(${alert.notification_type} === ${notificationType})`,
+          );
           console.log("[NOTIFICATION]   Message match:", messageMatch);
-          
+
           return typeMatch && messageMatch;
         });
 
         if (matchingAlert) {
-          console.log("[NOTIFICATION] ✅ Found matching alert:", matchingAlert.NotificationID);
+          console.log(
+            "[NOTIFICATION] ✅ Found matching alert:",
+            matchingAlert.NotificationID,
+          );
           setSelectedNotificationId(matchingAlert.NotificationID);
 
           // Open the bottom sheet with a delay to ensure ref is ready
           setTimeout(() => {
             console.log("[NOTIFICATION] 🔼 Attempting to open bottom sheet...");
             if (notificationSheetRef.current) {
-              console.log("[NOTIFICATION] ✅ Bottom sheet ref exists, opening...");
+              console.log(
+                "[NOTIFICATION] ✅ Bottom sheet ref exists, opening...",
+              );
               notificationSheetRef.current.snapToIndex(2);
               console.log("[NOTIFICATION] ✅ Bottom sheet opened to index 2");
             } else {
@@ -183,14 +201,22 @@ export default function RootLayout() {
           }, 500);
         } else {
           console.warn("[NOTIFICATION] ⚠️ No matching alert found");
-          console.warn("[NOTIFICATION] 🔍 Searched for type:", notificationType);
-          console.warn("[NOTIFICATION] 🔍 Searched for message:", notificationMessage);
+          console.warn(
+            "[NOTIFICATION] 🔍 Searched for type:",
+            notificationType,
+          );
+          console.warn(
+            "[NOTIFICATION] 🔍 Searched for message:",
+            notificationMessage,
+          );
         }
       } catch (error) {
         console.error("[NOTIFICATION] ❌ Error fetching alerts:", error);
       }
     } else {
-      console.warn("[NOTIFICATION] ⚠️ No notification type or message found in data");
+      console.warn(
+        "[NOTIFICATION] ⚠️ No notification type or message found in data",
+      );
       console.warn(
         "[NOTIFICATION] 📦 Received keys:",
         Object.keys(notificationData),

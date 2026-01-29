@@ -9,6 +9,7 @@ The app now uses a more robust approach that doesn't rely on notification IDs be
 ## 🔧 How It Works Now
 
 ### 1. User Taps Notification (App Closed/Background)
+
 ```
 User taps notification
   ↓
@@ -26,7 +27,9 @@ App marks as read: POST /myalerts/read/{NotificationID}
 ```
 
 ### 2. What Gets Matched
+
 The app looks for an alert where **BOTH** match:
+
 - `notification_type` from push === `notification_type` from alert
 - `notification_message` from push === `notification_message` from alert
 
@@ -35,6 +38,7 @@ The app looks for an alert where **BOTH** match:
 ## 📱 Push Notification Payload Format
 
 ### Required Format
+
 ```json
 {
   "to": "ExponentPushToken[xxx]",
@@ -50,6 +54,7 @@ The app looks for an alert where **BOTH** match:
 ```
 
 ### Important Notes
+
 ✅ **notification_type** must exactly match the alert's `notification_type` field  
 ✅ **notification_message** must exactly match the alert's `notification_message` field  
 ✅ Case-sensitive matching  
@@ -62,6 +67,7 @@ The app looks for an alert where **BOTH** match:
 ### When Creating a Notification:
 
 1. **Save to Database**
+
    ```sql
    INSERT INTO notifications (
      NotificationID,
@@ -73,17 +79,18 @@ The app looks for an alert where **BOTH** match:
    ```
 
 2. **Send Push Notification with Same Values**
+
    ```javascript
    const notification = {
      to: userPushToken,
-     sound: 'default',
+     sound: "default",
      title: notificationData.notification_type,
      body: notificationData.notification_message,
      data: {
-       notification_type: notificationData.notification_type,  // EXACT match
-       notification_message: notificationData.notification_message  // EXACT match
+       notification_type: notificationData.notification_type, // EXACT match
+       notification_message: notificationData.notification_message, // EXACT match
      },
-     badge: unreadCount
+     badge: unreadCount,
    };
    ```
 
@@ -94,6 +101,7 @@ The app looks for an alert where **BOTH** match:
 ## 📊 Example Flow
 
 ### Backend Creates Notification
+
 ```javascript
 const newNotification = {
   NotificationID: "MTc4OTEwNDkzNDQ=",
@@ -102,7 +110,7 @@ const newNotification = {
   notification_message: "Pro and sportsman should be heading to the lanes.",
   EventInfo: "The Bend Motorsport Park Pty Ltd",
   PushedDate: "2026-01-28 11:55:32",
-  opened: "0"
+  opened: "0",
 };
 
 // Save to database
@@ -114,13 +122,14 @@ await sendPushNotification({
   title: "Class Call",
   body: "Pro and sportsman should be heading to the lanes.",
   data: {
-    notification_type: "Class Call",  // ← Same as DB
-    notification_message: "Pro and sportsman should be heading to the lanes."  // ← Same as DB
-  }
+    notification_type: "Class Call", // ← Same as DB
+    notification_message: "Pro and sportsman should be heading to the lanes.", // ← Same as DB
+  },
 });
 ```
 
 ### App Receives and Matches
+
 ```javascript
 // 1. User taps notification
 // 2. App extracts from payload.data:
@@ -131,9 +140,9 @@ const message = "Pro and sportsman should be heading to the lanes.";
 const alerts = await getMyAlerts();
 
 // 4. App finds match:
-const match = alerts.find(alert => 
-  alert.notification_type === type &&
-  alert.notification_message === message
+const match = alerts.find(
+  (alert) =>
+    alert.notification_type === type && alert.notification_message === message,
 );
 
 // 5. App displays match.NotificationID = "MTc4OTEwNDkzNDQ="
@@ -144,6 +153,7 @@ const match = alerts.find(alert =>
 ## 🧪 Testing
 
 ### Test Push Notification
+
 ```bash
 curl -X POST https://exp.host/--/api/v2/push/send \
   -H "Content-Type: application/json" \
@@ -161,7 +171,9 @@ curl -X POST https://exp.host/--/api/v2/push/send \
 ```
 
 ### Verify in Console
+
 Look for these logs:
+
 ```
 [NOTIFICATION] 📦 Type: Class Call
 [NOTIFICATION] 📦 Message: Pro and sportsman should be heading to the lanes.
@@ -181,25 +193,37 @@ Look for these logs:
 ### Issue: "No matching alert found"
 
 **Possible Causes:**
+
 1. **Type mismatch**: Check exact spelling/capitalization
+
    ```javascript
    // ❌ Wrong
-   data: { notification_type: "class call" }  // lowercase
-   // ✅ Correct  
-   data: { notification_type: "Class Call" }  // matches DB
+   data: {
+     notification_type: "class call";
+   } // lowercase
+   // ✅ Correct
+   data: {
+     notification_type: "Class Call";
+   } // matches DB
    ```
 
 2. **Message mismatch**: Check for extra spaces, newlines, or different text
+
    ```javascript
    // ❌ Wrong
-   data: { notification_message: "Pro and sportsman should head to the lanes." }
+   data: {
+     notification_message: "Pro and sportsman should head to the lanes.";
+   }
    // ✅ Correct
-   data: { notification_message: "Pro and sportsman should be heading to the lanes." }
+   data: {
+     notification_message: "Pro and sportsman should be heading to the lanes.";
+   }
    ```
 
 3. **Alert not in database yet**: Ensure notification is saved before sending push
 
 **Debug Steps:**
+
 1. Check console logs for type and message being searched
 2. Verify the alert exists in `/myalerts` response
 3. Compare strings character-by-character
@@ -207,6 +231,7 @@ Look for these logs:
 ### Issue: Multiple matches found
 
 If multiple alerts have the same type and message, the app will use the **first match** found. To avoid this:
+
 - Make notification messages unique (add timestamp, event name, etc.)
 - Or include additional fields in the match criteria
 
@@ -215,6 +240,7 @@ If multiple alerts have the same type and message, the app will use the **first 
 ## 📝 Code Examples
 
 ### Node.js Backend Example
+
 ```javascript
 async function createAndSendNotification(userId, eventId, type, message) {
   // 1. Create notification in database
@@ -224,7 +250,7 @@ async function createAndSendNotification(userId, eventId, type, message) {
     notification_message: message,
     EventInfo: eventName,
     PushedDate: new Date().toISOString(),
-    opened: '0'
+    opened: "0",
   });
 
   // 2. Get user's push token
@@ -236,9 +262,9 @@ async function createAndSendNotification(userId, eventId, type, message) {
     title: type,
     body: message,
     data: {
-      notification_type: type,        // ← Must match DB
-      notification_message: message   // ← Must match DB
-    }
+      notification_type: type, // ← Must match DB
+      notification_message: message, // ← Must match DB
+    },
   });
 
   return notification;
@@ -246,6 +272,7 @@ async function createAndSendNotification(userId, eventId, type, message) {
 ```
 
 ### PHP Backend Example
+
 ```php
 function createAndSendNotification($userId, $eventId, $type, $message) {
     // 1. Save to database

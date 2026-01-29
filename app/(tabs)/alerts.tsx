@@ -54,7 +54,11 @@ export default function AlertsScreen() {
       setError(null);
       const data = await getMyAlerts();
 
-      console.log("[ALERTS] 📦 Loaded", Array.isArray(data) ? data.length : data?.msg?.length || 0, "alerts");
+      console.log(
+        "[ALERTS] 📦 Loaded",
+        Array.isArray(data) ? data.length : data?.msg?.length || 0,
+        "alerts",
+      );
 
       const alerts = Array.isArray(data)
         ? data
@@ -77,7 +81,12 @@ export default function AlertsScreen() {
 
           // Log for debugging
           if (openedValue !== "1" && openedValue !== "0") {
-            console.log("[ALERTS] ⚠️ Unexpected opened value:", openedValue, "for notification:", a.NotificationID);
+            console.log(
+              "[ALERTS] ⚠️ Unexpected opened value:",
+              openedValue,
+              "for notification:",
+              a.NotificationID,
+            );
           }
 
           // Parse and format the PushedDate using timezone-aware utility
@@ -113,7 +122,7 @@ export default function AlertsScreen() {
         });
 
       setNotificationsList(transformed);
-      
+
       // Refresh the notification badge count after loading
       await refreshNotifications();
     } catch (err) {
@@ -134,7 +143,7 @@ export default function AlertsScreen() {
 
   const markAsRead = async (id: string) => {
     console.log("[ALERTS] 📖 Marking notification as read:", id);
-    
+
     // Optimistic update
     setNotificationsList((prev) =>
       prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
@@ -143,10 +152,10 @@ export default function AlertsScreen() {
     try {
       const response = await markAlertAsRead(id);
       console.log("[ALERTS] 📦 Mark as read response:", response);
-      
+
       // Small delay to allow backend to update before refreshing
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
       // Refresh the notification badge count
       await refreshNotifications();
       console.log("[ALERTS] ✅ Marked notification as read:", id);
@@ -165,14 +174,15 @@ export default function AlertsScreen() {
   const sendTestNotification = async () => {
     try {
       console.log("[DEBUG] 🧪 Sending test notification...");
-      
+
       // Use hardcoded values that match your backend alerts
       await scheduleLocalNotification({
         title: "Class Call",
         body: "Pro and sportsman should be heading to the lanes.",
         data: {
           notification_type: "Class Call",
-          notification_message: "Pro and sportsman should be heading to the lanes.",
+          notification_message:
+            "Pro and sportsman should be heading to the lanes.",
         },
         badge: 1,
         sound: "default",
@@ -202,9 +212,11 @@ export default function AlertsScreen() {
           <View style={styles.headerTop}>
             <View>
               <Text style={styles.title}>Alerts</Text>
-              <Text style={styles.subtitle}>Event updates & service requests</Text>
+              <Text style={styles.subtitle}>
+                Event updates & service requests
+              </Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.debugButton}
               onPress={sendTestNotification}
             >
