@@ -13,18 +13,18 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import {
-    getOrCreateEndpointArn,
-    registerTokenWithSNS,
-    sendPushNotificationViaSNS,
+  getOrCreateEndpointArn,
+  registerTokenWithSNS,
+  sendPushNotificationViaSNS,
 } from "./awsSnsServiceSimple";
 import {
-    logTokenValidation,
-    validateAndFormatSNSToken,
+  logTokenValidation,
+  validateAndFormatSNSToken,
 } from "./awsSnsTokenUtils";
 import { getDeviceToken } from "./deviceToken";
 import {
-    startListeningForDeviceToken,
-    storeDeviceToken,
+  startListeningForDeviceToken,
+  storeDeviceToken,
 } from "./iosDeviceTokenManager";
 
 // NOTE: Notification handler is now configured in app/_layout.tsx at module level

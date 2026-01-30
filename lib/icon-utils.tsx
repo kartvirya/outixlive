@@ -1,45 +1,48 @@
-import React from 'react';
 import {
-  Zap,
-  Fuel,
-  Wrench,
   AlertCircle,
-  HelpCircle,
-  Phone,
-  MessageSquare,
+  AlertTriangle,
   Bell,
+  Calendar,
+  CheckCircle,
+  Clock,
+  Droplets,
+  Fuel,
+  HelpCircle,
+  Info,
+  Megaphone,
+  MessageSquare,
+  Phone,
+  Settings,
   ShieldCheck,
   Truck,
-  Droplets,
-  Settings,
-  AlertTriangle,
-  Calendar,
   Users,
-  Megaphone,
-  Info,
-  Clock,
-  CheckCircle,
-} from 'lucide-react-native';
+  Wrench,
+  Zap,
+} from "lucide-react-native";
+import React from "react";
 
 export type ActionIconType =
-  | 'zap'
-  | 'fuel'
-  | 'wrench'
-  | 'alert'
-  | 'help'
-  | 'phone'
-  | 'message'
-  | 'bell'
-  | 'shield'
-  | 'truck'
-  | 'droplets'
-  | 'settings';
+  | "zap"
+  | "fuel"
+  | "wrench"
+  | "alert"
+  | "help"
+  | "phone"
+  | "message"
+  | "bell"
+  | "shield"
+  | "truck"
+  | "droplets"
+  | "settings";
 
-export type ContactType = 'email' | 'sms' | 'username';
+export type ContactType = "email" | "sms" | "username";
 
-export type PriceType = 'none' | 'fixed' | 'user-input';
+export type PriceType = "none" | "fixed" | "user-input";
 
-const ICON_MAP: Record<ActionIconType, React.ComponentType<{ size?: number; color?: string; style?: any }>> = {
+const ICON_MAP: Record<
+  ActionIconType,
+  React.ComponentType<{ size?: number; color?: string; style?: any }>
+> = {
   zap: Zap,
   fuel: Fuel,
   wrench: Wrench,
@@ -56,16 +59,24 @@ const ICON_MAP: Record<ActionIconType, React.ComponentType<{ size?: number; colo
 
 // Notification icon mapping for alerts
 // Maps icon numbers (1-9) to actual icon components
-const NOTIFICATION_ICON_MAP: Record<string, React.ComponentType<{ size?: number; color?: string; style?: any; fill?: string }>> = {
-  "1": Bell,          // Bell
+const NOTIFICATION_ICON_MAP: Record<
+  string,
+  React.ComponentType<{
+    size?: number;
+    color?: string;
+    style?: any;
+    fill?: string;
+  }>
+> = {
+  "1": Bell, // Bell
   "2": AlertTriangle, // Alert
-  "3": Calendar,      // Schedule
-  "4": Users,         // Group
-  "5": Megaphone,     // Announce
-  "6": Info,          // Info
-  "7": Clock,         // Time
-  "8": CheckCircle,   // Check
-  "9": Zap,           // Urgent
+  "3": Calendar, // Schedule
+  "4": Users, // Group
+  "5": Megaphone, // Announce
+  "6": Info, // Info
+  "7": Clock, // Time
+  "8": CheckCircle, // Check
+  "9": Zap, // Urgent
 };
 
 export const getActionIconComponent = (iconId: ActionIconType) => {
@@ -97,4 +108,3 @@ export const NOTIFICATION_ICONS = [
   { number: "8", icon: CheckCircle, label: "Check" },
   { number: "9", icon: Zap, label: "Urgent" },
 ] as const;
-

@@ -7,30 +7,30 @@ import { useAdmin } from "@/contexts/AdminContext";
 import type { Event } from "@/data/mockData";
 import { getEvents } from "@/lib/api";
 import {
-    distanceKm,
-    getBrowserLocation,
-    isValidLatLng,
-    type LatLng,
+  distanceKm,
+  getBrowserLocation,
+  isValidLatLng,
+  type LatLng,
 } from "@/lib/utils";
 import { useRouter } from "expo-router";
 import {
-    Bell,
-    ChevronDown,
-    ChevronUp,
-    MapPin,
-    Navigation,
-    Search,
+  Bell,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
+  Navigation,
+  Search,
 } from "lucide-react-native";
 import { MotiView } from "moti";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 

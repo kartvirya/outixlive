@@ -437,30 +437,22 @@ export default function RootLayout() {
             const sections = [];
 
             // Notification content section
-            const contentFields = [];
+            const messageContent = [];
             if (hasValue(notificationId) && notificationId !== "Not found")
-              contentFields.push(`${notificationId}`);
-            if (hasValue(content.title))
-              contentFields.push(`${formatValue(content.title)}`);
-            if (hasValue(content.body))
-              contentFields.push(`${formatValue(content.body)}`);
+              messageContent.push(`ID: ${notificationId}`);
+            if (hasValue(content.body)) messageContent.push(`${content.body}`);
             if (hasValue(content.subtitle))
-              contentFields.push(`${formatValue(content.subtitle)}`);
+              messageContent.push(`${content.subtitle}`);
             if (hasValue(content.categoryIdentifier))
-              contentFields.push(`${content.categoryIdentifier}`);
+              messageContent.push(`Category: ${content.categoryIdentifier}`);
 
-            if (contentFields.length > 0) {
-              sections.push(...contentFields);
-            }
+            const popupTitle = content.title || "Notification";
+            const popupMessage =
+              messageContent.length > 0
+                ? messageContent.join("\n\n")
+                : "No content available";
 
-            // If no sections, show minimal message
-            if (sections.length === 0) {
-              sections.push(`Empty notification`);
-            }
-
-            const debugInfo = [...sections].join("\n");
-
-            Alert.alert("Notification Details", debugInfo, [{ text: "OK" }], {
+            Alert.alert(popupTitle, popupMessage, [{ text: "OK" }], {
               cancelable: true,
             });
 
@@ -618,30 +610,22 @@ export default function RootLayout() {
         const sections = [];
 
         // Notification content section
-        const contentFields = [];
+        const messageContent = [];
         if (hasValue(notificationId) && notificationId !== "Not found")
-          contentFields.push(`${notificationId}`);
-        if (hasValue(content.title))
-          contentFields.push(`${formatValue(content.title)}`);
-        if (hasValue(content.body))
-          contentFields.push(`${formatValue(content.body)}`);
+          messageContent.push(`ID: ${notificationId}`);
+        if (hasValue(content.body)) messageContent.push(`${content.body}`);
         if (hasValue(content.subtitle))
-          contentFields.push(`${formatValue(content.subtitle)}`);
+          messageContent.push(`${content.subtitle}`);
         if (hasValue(content.categoryIdentifier))
-          contentFields.push(`${content.categoryIdentifier}`);
+          messageContent.push(`Category: ${content.categoryIdentifier}`);
 
-        if (contentFields.length > 0) {
-          sections.push(...contentFields);
-        }
+        const popupTitle = content.title || "Notification";
+        const popupMessage =
+          messageContent.length > 0
+            ? messageContent.join("\n\n")
+            : "No content available";
 
-        // If no sections, show minimal message
-        if (sections.length === 0) {
-          sections.push(`Empty notification`);
-        }
-
-        const debugInfo = [...sections].join("\n");
-
-        Alert.alert("Notification Details", debugInfo, [{ text: "OK" }], {
+        Alert.alert(popupTitle, popupMessage, [{ text: "OK" }], {
           cancelable: true,
         });
 
