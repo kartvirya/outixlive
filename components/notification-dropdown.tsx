@@ -4,13 +4,13 @@ import { getNotificationIcon } from "@/lib/icon-utils";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 interface NotificationDropdownProps {
@@ -207,6 +207,8 @@ export const NotificationDropdown = ({
                                   styles.alertType,
                                   isRead && styles.alertTypeRead,
                                 ]}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
                               >
                                 {alert.notification_type || "Alert"}
                               </Text>
@@ -354,18 +356,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    minWidth: 0, // Allow shrinking
   },
   alertTypeContainer: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
     gap: 8,
+    minWidth: 0, // Allow shrinking
   },
   alertType: {
     fontSize: 14,
     fontWeight: "600",
     color: "#22c55e",
     flex: 1,
+    minWidth: 0, // Allow shrinking
   },
   alertTypeRead: {
     color: "#737373",
@@ -375,11 +380,15 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: "#22c55e",
+    flexShrink: 0, // Prevent shrinking
   },
   alertTime: {
     fontSize: 12,
     color: "#737373",
     marginLeft: 8,
+    flexShrink: 0, // Prevent shrinking
+    width: 60, // Fixed width for time
+    textAlign: "right",
   },
   alertMessage: {
     fontSize: 14,

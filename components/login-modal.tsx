@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { ModalComponent } from './ui/modal';
-import { Input } from './ui/input';
-import { Button } from './ui/button';
-import { Loader2, Mail, Lock } from 'lucide-react-native';
+import { Lock, Mail } from "lucide-react-native";
+import React, { useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { ModalComponent } from "./ui/modal";
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -13,15 +13,21 @@ interface LoginModalProps {
   error: string | null;
 }
 
-export const LoginModal = ({ isOpen, onClose, onLogin, isLoading, error }: LoginModalProps) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export const LoginModal = ({
+  isOpen,
+  onClose,
+  onLogin,
+  isLoading,
+  error,
+}: LoginModalProps) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleSubmit = async () => {
     const success = await onLogin(email, password);
     if (success) {
-      setEmail('');
-      setPassword('');
+      setEmail("");
+      setPassword("");
       onClose();
     }
   };
@@ -70,9 +76,7 @@ export const LoginModal = ({ isOpen, onClose, onLogin, isLoading, error }: Login
           </View>
         </View>
 
-        {error && (
-          <Text style={styles.error}>{error}</Text>
-        )}
+        {error && <Text style={styles.error}>{error}</Text>}
 
         <Button
           onPress={handleSubmit}
@@ -80,7 +84,7 @@ export const LoginModal = ({ isOpen, onClose, onLogin, isLoading, error }: Login
           loading={isLoading}
           style={styles.submitButton}
         >
-          {isLoading ? 'Signing in...' : 'Sign In'}
+          {isLoading ? "Signing in..." : "Sign In"}
         </Button>
 
         <Text style={styles.footer}>
@@ -93,32 +97,32 @@ export const LoginModal = ({ isOpen, onClose, onLogin, isLoading, error }: Login
 
 const styles = StyleSheet.create({
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 24,
   },
   logoContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#22c55e',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#22c55e",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 12,
   },
   logoText: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontWeight: "bold",
+    color: "#fff",
   },
   title: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontWeight: "bold",
+    color: "#fff",
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    color: '#737373',
+    color: "#737373",
   },
   form: {
     // gap: 16, - using marginBottom instead for compatibility
@@ -128,16 +132,16 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#fff',
+    fontWeight: "500",
+    color: "#fff",
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1f2937',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1f2937",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: "#374151",
   },
   inputIcon: {
     marginLeft: 12,
@@ -145,21 +149,21 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     borderWidth: 0,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   error: {
     fontSize: 14,
-    color: '#ef4444',
-    textAlign: 'center',
+    color: "#ef4444",
+    textAlign: "center",
   },
   submitButton: {
-    width: '100%',
+    width: "100%",
     marginTop: 8,
   },
   footer: {
     fontSize: 12,
-    color: '#737373',
-    textAlign: 'center',
+    color: "#737373",
+    textAlign: "center",
     marginTop: 8,
   },
 });

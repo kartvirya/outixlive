@@ -3,12 +3,20 @@ import { LoginModal } from "@/components/login-modal";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { Image } from "expo-image";
-import { LogOut, Mail, Phone, User as UserIcon } from "lucide-react-native";
+import { useRouter } from "expo-router";
+import {
+    LogOut,
+    Mail,
+    Palette,
+    Phone,
+    User as UserIcon,
+} from "lucide-react-native";
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { user, isAuthenticated, isLoading, error, login, logout } = useAuth();
   const [showLoginModal, setShowLoginModal] = useState(false);
 
@@ -32,6 +40,26 @@ export default function ProfileScreen() {
             >
               Sign In
             </Button>
+
+            {/* Temporarily hidden for production
+            <Button
+              variant="outline"
+              onPress={() => router.push("/ui-examples")}
+              style={[
+                styles.loginButton,
+                {
+                  marginTop: 12,
+                  backgroundColor: "transparent",
+                  borderColor: "#22c55e",
+                },
+              ]}
+            >
+              <Palette size={16} color="#22c55e" style={{ marginRight: 8 }} />
+              <Text style={{ color: "#22c55e", fontWeight: "500" }}>
+                UI Examples & Tests
+              </Text>
+            </Button>
+            */}
           </View>
         </View>
         <LoginModal
@@ -104,6 +132,19 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
+          {user.email === "test@outix.co" && (
+            <Button
+              variant="outline"
+              onPress={() => router.push("/ui-examples")}
+              style={[styles.logoutButton, { marginBottom: 12 }]}
+            >
+              <Palette size={16} color="#22c55e" style={{ marginRight: 8 }} />
+              <Text style={[styles.logoutText, { color: "#22c55e" }]}>
+                UI Examples & Tests
+              </Text>
+            </Button>
+          )}
+
           <Button
             variant="outline"
             onPress={logout}

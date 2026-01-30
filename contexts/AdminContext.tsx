@@ -50,7 +50,10 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
             setUserPromoterId(null);
           }
         } else {
-          console.log("[ADMIN] ⚠️ No user data in storage");
+          // Only log once, not on every poll
+          if (userPromoterId !== null) {
+            console.log("[ADMIN] ⚠️ No user data in storage");
+          }
           // Clear promoterId if no user data
           setUserPromoterId(null);
         }
@@ -75,8 +78,8 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
     // Load initially
     loadAdminState();
 
-    // Poll for changes every 500ms to detect login/logout
-    const interval = setInterval(loadAdminState, 500);
+    // Poll for changes every 2 seconds to detect login/logout (reduced frequency for production)
+    const interval = setInterval(loadAdminState, 2000);
 
     return () => clearInterval(interval);
   }, []);

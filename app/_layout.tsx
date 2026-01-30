@@ -1,20 +1,18 @@
 import { AddPaymentPrompt } from "@/components/add-payment-prompt";
 import { BuybackNotification } from "@/components/buyback-notification";
 import { BuybackSuccessModal } from "@/components/buyback-success-modal";
-import { NotificationDetailBottomSheet } from "@/components/notification-detail-bottom-sheet";
+import { NotificationDetailModal } from "@/components/notification-detail-modal";
 import { AdminProvider } from "@/contexts/AdminContext";
 import { BuybackProvider } from "@/contexts/BuybackContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { verifyConfiguration } from "@/lib/verifyConfig";
-import BottomSheetLib from "@gorhom/bottom-sheet";
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
@@ -61,8 +59,9 @@ export default function RootLayout() {
   // Initialize location permissions
   const { requestPermission } = useLocationPermission();
 
-  // Ref for notification bottom sheet
-  const notificationSheetRef = useRef<BottomSheetLib>(null);
+  // State for notification modal
+  const [isNotificationModalVisible, setIsNotificationModalVisible] =
+    useState(false);
   const [selectedNotificationId, setSelectedNotificationId] = useState<
     string | null
   >(null);
@@ -164,73 +163,24 @@ export default function RootLayout() {
     [isNavigationReady, segments],
   );
 
-  // Helper function to open bottom sheet with retries - PRODUCTION READY
-  const openNotificationSheet = useCallback(
-    async (notificationId: string, retryCount = 0) => {
-      const maxRetries = 5;
-      const baseDelay = 300;
-      const delay = retryCount === 0 ? baseDelay : baseDelay * (retryCount + 1);
+  // Helper function to open modal - PRODUCTION READY
+  const openNotificationModal = useCallback(
+    async (notificationId: string) => {
+      console.log("[NOTIFICATION] 🔼 Opening notification modal...");
 
       // Wait for navigation to be ready first
-      if (retryCount === 0) {
-        const navReady = await waitForNavigationReady();
-        if (!navReady) {
-          console.warn(
-            "[NOTIFICATION] ⚠️ Navigation not ready, but proceeding anyway...",
-          );
-        }
+      const navReady = await waitForNavigationReady();
+      if (!navReady) {
+        console.warn(
+          "[NOTIFICATION] ⚠️ Navigation not ready, but proceeding anyway...",
+        );
       }
 
-      setTimeout(() => {
-        console.log(
-          `[NOTIFICATION] 🔼 Attempting to open bottom sheet (attempt ${retryCount + 1}/${maxRetries + 1})...`,
-        );
-        console.log(
-          `[NOTIFICATION] 📊 Navigation ready: ${isNavigationReady}, Segments: ${segments.length}`,
-        );
-
-        if (notificationSheetRef.current) {
-          try {
-            // Ensure we're on the main thread
-            if (Platform.OS === "ios") {
-              // iOS sometimes needs a small delay
-              setTimeout(() => {
-                notificationSheetRef.current?.snapToIndex(2);
-              }, 50);
-            } else {
-              notificationSheetRef.current.snapToIndex(2);
-            }
-            console.log("[NOTIFICATION] ✅ Bottom sheet opened successfully!");
-          } catch (error) {
-            console.error(
-              "[NOTIFICATION] ❌ Error opening bottom sheet:",
-              error,
-            );
-            if (retryCount < maxRetries) {
-              console.log(`[NOTIFICATION] 🔄 Retrying in ${delay}ms...`);
-              openNotificationSheet(notificationId, retryCount + 1);
-            } else {
-              console.error(
-                "[NOTIFICATION] ❌ Failed to open bottom sheet after all retries!",
-              );
-            }
-          }
-        } else {
-          console.warn(
-            `[NOTIFICATION] ⚠️ Bottom sheet ref is null (attempt ${retryCount + 1}/${maxRetries + 1})`,
-          );
-          if (retryCount < maxRetries) {
-            console.log(`[NOTIFICATION] 🔄 Retrying in ${delay}ms...`);
-            openNotificationSheet(notificationId, retryCount + 1);
-          } else {
-            console.error(
-              "[NOTIFICATION] ❌ Failed to open bottom sheet after all retries!",
-            );
-          }
-        }
-      }, delay);
+      // Open the modal with the notification ID
+      setIsNotificationModalVisible(true);
+      console.log("[NOTIFICATION] ✅ Modal opened successfully!");
     },
-    [waitForNavigationReady, isNavigationReady, segments],
+    [waitForNavigationReady],
   );
 
   // Handle notification data extraction and opening bottom sheet
@@ -272,8 +222,12 @@ export default function RootLayout() {
           "[NOTIFICATION] ✅ Using NotificationID directly:",
           notificationId,
         );
-        setSelectedNotificationId(notificationId);
-        openNotificationSheet(notificationId);
+        // Note: Modal opening disabled - only debug popup shows
+        // setSelectedNotificationId(notificationId);
+        // openNotificationModal(notificationId);
+        console.log(
+          "[NOTIFICATION] 🎯 Notification processed (debug popup only)",
+        );
         return;
       }
 
@@ -333,8 +287,12 @@ export default function RootLayout() {
               "[NOTIFICATION] ✅ Found matching alert:",
               matchingAlert.NotificationID,
             );
-            setSelectedNotificationId(matchingAlert.NotificationID);
-            openNotificationSheet(matchingAlert.NotificationID);
+            // Note: Modal opening disabled - only debug popup shows
+            // setSelectedNotificationId(matchingAlert.NotificationID);
+            // openNotificationModal(matchingAlert.NotificationID);
+            console.log(
+              "[NOTIFICATION] 🎯 Notification processed via fallback (debug popup only)",
+            );
           } else {
             console.warn("[NOTIFICATION] ⚠️ No matching alert found");
             console.warn(
@@ -369,7 +327,7 @@ export default function RootLayout() {
         );
       }
     },
-    [extractNotificationId, openNotificationSheet],
+    [extractNotificationId], // Removed openNotificationModal dependency
   );
 
   // Expose handleNotificationData globally for testing (ALWAYS - needed for test button)
@@ -445,10 +403,72 @@ export default function RootLayout() {
             );
 
             const data = response.notification.request.content.data;
+            const content = response.notification.request.content;
+
+            // Extract notification ID
+            const notificationId =
+              data?.NotificationID ||
+              data?.notificationId ||
+              data?.notification_id ||
+              data?.id ||
+              "NOT FOUND";
+
             console.log(
               "[NOTIFICATION] 📦 Data:",
               JSON.stringify(data, null, 2),
             );
+
+            // DEBUG: Show beautifully formatted debug popup for app closed notification
+            const { Alert } = require("react-native");
+
+            // Helper function to check if value exists and is meaningful
+            const hasValue = (value: any) => {
+              return value !== null && value !== undefined && value !== "";
+            };
+
+            const formatValue = (value: any, maxLength = 50) => {
+              const str = String(value);
+              return str.length > maxLength
+                ? `${str.substring(0, maxLength)}...`
+                : str;
+            };
+
+            // Build sections only if they have content
+            const sections = [];
+
+            // Notification content section
+            const contentFields = [];
+            if (hasValue(notificationId) && notificationId !== "Not found")
+              contentFields.push(`${notificationId}`);
+            if (hasValue(content.title))
+              contentFields.push(`${formatValue(content.title)}`);
+            if (hasValue(content.body))
+              contentFields.push(`${formatValue(content.body)}`);
+            if (hasValue(content.subtitle))
+              contentFields.push(`${formatValue(content.subtitle)}`);
+            if (hasValue(content.categoryIdentifier))
+              contentFields.push(`${content.categoryIdentifier}`);
+
+            if (contentFields.length > 0) {
+              sections.push(...contentFields);
+            }
+
+            // If no sections, show minimal message
+            if (sections.length === 0) {
+              sections.push(`Empty notification`);
+            }
+
+            const debugInfo = [...sections].join("\n");
+
+            Alert.alert("Notification Details", debugInfo, [{ text: "OK" }], {
+              cancelable: true,
+            });
+
+            console.log("[NOTIFICATION] 📋 App closed notification:", {
+              title: content.title,
+              body: content.body,
+              notificationId,
+            });
 
             // Small delay to ensure UI is fully rendered
             setTimeout(() => {
@@ -498,38 +518,144 @@ export default function RootLayout() {
     }
   }, [nativePushToken, devicePushToken, error]);
 
-  // Handle notification from usePushNotifications hook (for foreground/background taps)
-  // This listener fires when app is already running (foreground or background)
+  // Direct notification listener - captures notification data when received
   useEffect(() => {
-    if (notification && isReadyForNotifications) {
-      console.log(
-        "[NOTIFICATION] 🔔 Notification received in _layout (app was open):",
-        notification,
-      );
+    const subscription = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        // Get all content fields
+        const content = notification.request.content;
+        const data = content.data;
 
-      // Extract notification data
-      const notificationData = notification.request.content.data || {};
+        console.log(
+          "[NOTIFICATION] 🔔 Notification received via direct listener",
+        );
+        console.log(
+          "[NOTIFICATION] 📦 Full content object:",
+          JSON.stringify(content, null, 2),
+        );
+        console.log(
+          "[NOTIFICATION] 📦 Data field:",
+          JSON.stringify(data, null, 2),
+        );
+        console.log(
+          "[NOTIFICATION] 📋 Title:",
+          content.title,
+          content.NotificationID,
+        );
+        console.log("[NOTIFICATION] 📋 Body:", content.body);
+        console.log("[NOTIFICATION] 📋 Subtitle:", content.subtitle);
+        console.log("[NOTIFICATION] 🔑 Data keys:", Object.keys(data || {}));
 
-      // Log the full content for debugging
-      console.log(
-        "[NOTIFICATION] 📋 Title:",
-        notification.request.content.title,
-      );
-      console.log("[NOTIFICATION] 📋 Body:", notification.request.content.body);
+        // Try to find NotificationID in various places
+        const notificationId =
+          data?.NotificationID ||
+          data?.notificationId ||
+          data?.notification_id ||
+          data?.id ||
+          // Also check if it's in the raw content somewhere
+          (content as any)?.NotificationID ||
+          (content as any)?.notificationId ||
+          "Not found";
 
-      // Determine source based on notification state
-      const source = "app-open"; // App is already open (foreground/background)
+        console.log("[NOTIFICATION] 🔑 Notification ID:", notificationId);
 
-      // Small delay to ensure navigation is ready
-      setTimeout(() => {
-        handleNotificationData(notificationData, source);
-      }, 300);
-    } else if (notification && !isReadyForNotifications) {
-      console.log(
-        "[NOTIFICATION] ⏳ Notification received but app not ready yet, will process when ready...",
-      );
-    }
-  }, [notification, isReadyForNotifications, handleNotificationData]);
+        // Note: Removed custom alert popup for production - iOS native popup is working
+        // Custom popup only shows on notification tap now
+
+        // Do NOT process notification when received - only when tapped
+        // This prevents auto-opening the modal when notification appears
+        console.log(
+          "[NOTIFICATION] 📝 Notification received but not processed (waiting for user tap)",
+        );
+      },
+    );
+
+    return () => subscription.remove();
+  }, [isReadyForNotifications, handleNotificationData]);
+
+  // Notification response listener - when user taps on notification
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const data = response.notification.request.content.data;
+
+        console.log(
+          "[NOTIFICATION] 👆 Notification tapped via direct listener",
+        );
+        console.log(
+          "[NOTIFICATION] 📦 Full payload:",
+          JSON.stringify(data, null, 2),
+        );
+        console.log(
+          "[NOTIFICATION] 🔑 Notification ID:",
+          data?.notificationId || data?.NotificationID || "Not found",
+        );
+
+        // DEBUG: Show alert with full payload data
+        const { Alert } = require("react-native");
+        const notificationId =
+          data?.NotificationID ||
+          data?.notificationId ||
+          data?.notification_id ||
+          data?.id ||
+          "Not found";
+
+        const content = response.notification.request.content;
+
+        // Helper function to check if value exists and is meaningful
+        const hasValue = (value: any) => {
+          return value !== null && value !== undefined && value !== "";
+        };
+
+        const formatValue = (value: any, maxLength = 50) => {
+          const str = String(value);
+          return str.length > maxLength
+            ? `${str.substring(0, maxLength)}...`
+            : str;
+        };
+
+        // Build sections only if they have content
+        const sections = [];
+
+        // Notification content section
+        const contentFields = [];
+        if (hasValue(notificationId) && notificationId !== "Not found")
+          contentFields.push(`${notificationId}`);
+        if (hasValue(content.title))
+          contentFields.push(`${formatValue(content.title)}`);
+        if (hasValue(content.body))
+          contentFields.push(`${formatValue(content.body)}`);
+        if (hasValue(content.subtitle))
+          contentFields.push(`${formatValue(content.subtitle)}`);
+        if (hasValue(content.categoryIdentifier))
+          contentFields.push(`${content.categoryIdentifier}`);
+
+        if (contentFields.length > 0) {
+          sections.push(...contentFields);
+        }
+
+        // If no sections, show minimal message
+        if (sections.length === 0) {
+          sections.push(`Empty notification`);
+        }
+
+        const debugInfo = [...sections].join("\n");
+
+        Alert.alert("Notification Details", debugInfo, [{ text: "OK" }], {
+          cancelable: true,
+        });
+
+        // Process notification if ready
+        if (isReadyForNotifications && data) {
+          setTimeout(() => {
+            handleNotificationData(data, "tap");
+          }, 300);
+        }
+      },
+    );
+
+    return () => subscription.remove();
+  }, [isReadyForNotifications, handleNotificationData]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -544,11 +670,12 @@ export default function RootLayout() {
               <BuybackNotification />
               <BuybackSuccessModal />
               <AddPaymentPrompt />
-              <NotificationDetailBottomSheet
-                ref={notificationSheetRef}
-                notificationId={selectedNotificationId}
+              <NotificationDetailModal
+                visible={isNotificationModalVisible}
+                notificationId={selectedNotificationId || ""}
                 onClose={() => {
-                  console.log("[NOTIFICATION] 🔽 Bottom sheet closed");
+                  console.log("[NOTIFICATION] 🔽 Modal closed");
+                  setIsNotificationModalVisible(false);
                   setSelectedNotificationId(null);
                 }}
               />

@@ -11,7 +11,7 @@ export interface User {
   phone?: string;
   avatar?: string;
   promoterId?: string;
-  PromoterId?: string;  // API uses this field name
+  PromoterId?: string; // API uses this field name
 }
 
 interface AuthState {
@@ -86,6 +86,36 @@ export const useAuth = () => {
     setAuthState((prev) => ({ ...prev, isLoading: true, error: null }));
 
     try {
+      // Check for hardcoded test user
+      if (email === "test@outix.co" && password === "Password$1234") {
+        const testUser: User = {
+          id: "test-user-1",
+          email: "test@outix.co",
+          name: "Test User",
+          phone: "+1234567890",
+          avatar: undefined,
+          PromoterId: "test-promoter-1",
+          promoterId: "test-promoter-1",
+        };
+
+        // Save test user data
+        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(testUser));
+        await AsyncStorage.setItem(TOKEN_STORAGE_KEY, "test-token-123");
+        await AsyncStorage.setItem(
+          REFRESH_TOKEN_STORAGE_KEY,
+          "test-refresh-token-123",
+        );
+
+        setAuthState({
+          user: testUser,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+        });
+
+        return;
+      }
+
       // Create FormData (not JSON)
       const formdata = new FormData();
       formdata.append("email", email);
@@ -127,10 +157,10 @@ export const useAuth = () => {
       // Extract user data and tokens from response
       // Structure: data.data.user, data.data.token, data.data.refreshToken
       // Try multiple possible field names for promoterId
-      const promoterId = 
-        data.data.user.PromoterId ||  // API uses this!
-        data.data.user.promoterId || 
-        data.data.user.promoter_id || 
+      const promoterId =
+        data.data.user.PromoterId || // API uses this!
+        data.data.user.promoterId ||
+        data.data.user.promoter_id ||
         data.data.user.PromoterID ||
         data.data.user.promoter_ID ||
         data.data.user.venue_id ||
@@ -144,8 +174,8 @@ export const useAuth = () => {
         name: data.data.user.name,
         phone: data.data.user.phone || undefined,
         avatar: data.data.user.avatar || undefined,
-        PromoterId: data.data.user.PromoterId || undefined,  // Save original field
-        promoterId: promoterId,  // Save normalized field
+        PromoterId: data.data.user.PromoterId || undefined, // Save original field
+        promoterId: promoterId, // Save normalized field
       };
 
       const token = data.data.token;

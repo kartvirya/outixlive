@@ -2,6 +2,7 @@ import { Bell } from "lucide-react-native";
 import React, { useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { EventCardEnhanced } from "../components/event-card-enhanced";
+import { ExpoTokenDisplay } from "../components/expo-token-display";
 import { NotificationDeepLinkTest } from "../components/notification-deep-link-test";
 import { NotificationTestSimulator } from "../components/notification-test-simulator";
 import {
@@ -185,6 +186,17 @@ export default function UIExamplesScreen() {
             Test notification tapping and deep linking
           </Text>
           <NotificationDeepLinkTest />
+        </View>
+      </SlideInView>
+
+      {/* Section 3.6: Push Token Display */}
+      <SlideInView direction="bottom" delay={375}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Push Notification Tokens</Text>
+          <Text style={styles.sectionDescription}>
+            Copy your Expo and Device push tokens for testing
+          </Text>
+          <ExpoTokenDisplay />
         </View>
       </SlideInView>
 

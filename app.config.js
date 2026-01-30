@@ -16,7 +16,7 @@ export default {
         usesNonExemptEncryption: false,
       },
       infoPlist: {
-        UIBackgroundModes: ["remote-notification"],
+        UIBackgroundModes: ["remote-notification", "background-processing"],
       },
     },
 

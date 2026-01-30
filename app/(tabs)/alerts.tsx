@@ -1,6 +1,7 @@
 import { BuybackAlertItem } from "@/components/buyback-alert-item";
 import { ExpandableNotificationItem } from "@/components/expandable-notification-item";
 import { Header } from "@/components/header";
+import { NotificationDetailModal } from "@/components/notification-detail-modal";
 import { useBuyback } from "@/contexts/BuybackContext";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { type Notification } from "@/data/mockData";
@@ -26,6 +27,9 @@ export default function AlertsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [selectedNotificationId, setSelectedNotificationId] =
+    useState<string>("");
   const { offers } = useBuyback();
   const { refreshNotifications } = useNotifications();
 
@@ -129,6 +133,12 @@ export default function AlertsScreen() {
     loadAlerts(true);
   };
 
+  const handleLongPress = (id: string) => {
+    console.log("[ALERTS] 🔍 Long-press detected for notification:", id);
+    setSelectedNotificationId(id);
+    setIsModalVisible(true);
+  };
+
   const markAsRead = async (id: string) => {
     console.log("[ALERTS] 📖 Marking notification as read:", id);
 
@@ -204,6 +214,7 @@ export default function AlertsScreen() {
                   key={notification.id}
                   {...notification}
                   onMarkRead={markAsRead}
+                  onLongPress={handleLongPress}
                 />
               ))}
             </>
@@ -218,6 +229,14 @@ export default function AlertsScreen() {
           )}
         </ScrollView>
       </View>
+      <NotificationDetailModal
+        visible={isModalVisible}
+        notificationId={selectedNotificationId}
+        onClose={() => {
+          setIsModalVisible(false);
+          setSelectedNotificationId("");
+        }}
+      />
     </SafeAreaView>
   );
 }

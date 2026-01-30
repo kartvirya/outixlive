@@ -1,7 +1,13 @@
+import { useAdmin } from "@/contexts/AdminContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useAdmin } from "@/contexts/AdminContext";
+import {
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 export const AdminDebug = () => {
   const { isAdmin, userPromoterId } = useAdmin();
@@ -50,7 +56,9 @@ export const AdminDebug = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Admin Context</Text>
           <Text style={styles.text}>isAdmin: {String(isAdmin)}</Text>
-          <Text style={styles.text}>userPromoterId: {userPromoterId || "null"}</Text>
+          <Text style={styles.text}>
+            userPromoterId: {userPromoterId || "null"}
+          </Text>
         </View>
 
         <View style={styles.section}>
@@ -58,10 +66,7 @@ export const AdminDebug = () => {
           <Text style={styles.code}>{JSON.stringify(userData, null, 2)}</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.refreshButton}
-          onPress={loadUserData}
-        >
+        <TouchableOpacity style={styles.refreshButton} onPress={loadUserData}>
           <Text style={styles.refreshButtonText}>Refresh</Text>
         </TouchableOpacity>
       </ScrollView>

@@ -45,6 +45,7 @@ export interface ExpandableNotification {
 
 interface ExpandableNotificationItemProps extends ExpandableNotification {
   onMarkRead?: (id: string) => void;
+  onLongPress?: (id: string) => void;
 }
 
 const getTypeConfig = (
@@ -142,6 +143,7 @@ export const ExpandableNotificationItem = ({
   pitNumber,
   details,
   onMarkRead,
+  onLongPress,
 }: ExpandableNotificationItemProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const config = getTypeConfig(type, serviceStatus);
@@ -155,10 +157,17 @@ export const ExpandableNotificationItem = ({
     }
   };
 
+  const handleLongPress = () => {
+    if (onLongPress) {
+      onLongPress(id);
+    }
+  };
+
   return (
     <TouchableOpacity
       style={[styles.container, !isRead && styles.containerUnread]}
       onPress={handleToggle}
+      onLongPress={handleLongPress}
       activeOpacity={0.7}
     >
       <View style={styles.mainContent}>
