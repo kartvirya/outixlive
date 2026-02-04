@@ -5,6 +5,7 @@ import { AlertCircle, Bell, Calendar, CheckCircle } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+  Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -27,6 +28,9 @@ interface NotificationData {
   EventInfo: string;
   alertinfo: string;
   notification_icon: string;
+  image?: string;
+  notification_image?: string;
+  image_url?: string;
 }
 
 interface NotificationDetailBottomSheetProps {
@@ -189,6 +193,27 @@ export const NotificationDetailBottomSheet = React.forwardRef<
                     {notificationData.notification_message}
                   </Text>
                 </GlassCard>
+              </SlideInView>
+            )}
+
+            {/* Image */}
+            {(notificationData.image ||
+              notificationData.notification_image ||
+              notificationData.image_url) && (
+              <SlideInView direction="right" delay={340}>
+                <View style={styles.section}>
+                  <Text style={styles.label}>Image</Text>
+                  <Image
+                    source={{
+                      uri:
+                        notificationData.image ||
+                        notificationData.notification_image ||
+                        notificationData.image_url ||
+                        "",
+                    }}
+                    style={styles.alertImage}
+                  />
+                </View>
               </SlideInView>
             )}
 
@@ -365,6 +390,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: "#fafafa",
+  },
+  alertImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
   },
   eventCard: {
     padding: 16,

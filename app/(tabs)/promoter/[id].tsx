@@ -1,25 +1,30 @@
 import { AdminControls } from "@/components/admin-controls";
 import { EventCard } from "@/components/event-card";
 import { Button } from "@/components/ui/button";
+import { Select, SelectItem } from "@/components/ui/select";
 import { useAdmin } from "@/contexts/AdminContext";
 import type { Event, Promoter } from "@/data/mockData";
 import {
-    getPromoterAlerts,
-    getPromoterDetails,
-    hexToHsl,
-    hslToHex,
-    sendPromoterAlert,
-    setPromoterColor,
-    subscribeToPromoter,
-    unsubscribeFromPromoter
+  getPromoterAlerts,
+  getPromoterDetails,
+  hexToHsl,
+  hslToHex,
+  NotificationImageUpload,
+  sendPromoterAlert,
+  setPromoterColor,
+  subscribeToPromoter,
+  unsubscribeFromPromoter,
 } from "@/lib/api";
 import { formatTime } from "@/lib/dateUtils";
 import { getNotificationIcon, NOTIFICATION_ICONS } from "@/lib/icon-utils";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import {
     ArrowLeft,
     Bell,
+    ChevronDown,
     ChevronRight,
+    ChevronUp,
     Globe,
     Info,
     Mail,
@@ -28,7 +33,7 @@ import {
     Phone,
     Plus,
     Send,
-    X
+    X,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -46,9 +51,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PromoterDetailScreen() {
-  const { id } = useLocalSearchParams<{
-    id: string;
-  }>();
+  const params = useLocalSearchParams<{ id: string }>();
+  const rawId = params.id;
+  const id = typeof rawId === "string" ? rawId : Array.isArray(rawId) ? rawId[0] : undefined;
   const router = useRouter();
 
   const [promoter, setPromoter] = useState<Promoter | undefined>();
@@ -61,16 +66,23 @@ export default function PromoterDetailScreen() {
   const [alertNotificationType, setAlertNotificationType] = useState("");
   const [alertNotificationMessage, setAlertNotificationMessage] = useState("");
   const [alertNotificationIcon, setAlertNotificationIcon] = useState("1");
+  const [alertNotificationImage, setAlertNotificationImage] =
+    useState<NotificationImageUpload | null>(null);
   const [isSendingAlert, setIsSendingAlert] = useState(false);
   const [showAllPromoterAlerts, setShowAllPromoterAlerts] = useState(false);
   const [showAdminActionMenu, setShowAdminActionMenu] = useState(false);
+  const [expandedPromoterAlertId, setExpandedPromoterAlertId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
+    if (!id) return;
     loadPromoterDetailsAndEvents();
     loadPromoterAlerts();
   }, [id]);
 
   const loadPromoterDetailsAndEvents = async () => {
+    if (!id) return;
     try {
       setIsLoading(true);
       setError(null);
@@ -247,6 +259,7 @@ export default function PromoterDetailScreen() {
   };
 
   const loadPromoterAlerts = async () => {
+    if (!id) return;
     try {
       const data = await getPromoterAlerts(id);
 
@@ -277,6 +290,7 @@ export default function PromoterDetailScreen() {
         alertNotificationType.trim(),
         alertNotificationMessage.trim(),
         alertNotificationIcon,
+        alertNotificationImage,
       );
       // Reload alerts
       await loadPromoterAlerts();
@@ -284,12 +298,42 @@ export default function PromoterDetailScreen() {
       setAlertNotificationType("");
       setAlertNotificationMessage("");
       setAlertNotificationIcon("1");
+      setAlertNotificationImage(null);
       setShowSendAlertModal(false);
     } catch (err) {
       // Error handled silently or could show alert
     } finally {
       setIsSendingAlert(false);
     }
+  };
+
+  const handlePickAlertImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.9,
+    });
+
+    if (result.canceled || !result.assets?.[0]) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    const uri = asset.uri;
+    const name =
+      asset.fileName || uri.split("/").pop() || `alert-${Date.now()}.jpg`;
+    const type = asset.mimeType || "image/jpeg";
+
+    setAlertNotificationImage({ uri, name, type });
+  };
+
+  const handleRemoveAlertImage = () => {
+    setAlertNotificationImage(null);
   };
 
   const toggleSubscription = async () => {
@@ -389,6 +433,17 @@ export default function PromoterDetailScreen() {
     // Otherwise it's already HSL format
     return brandColor;
   };
+
+  if (!id) {
+    return (
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Invalid promoter</Text>
+          <Button onPress={() => router.back()}>Go Back</Button>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -616,14 +671,20 @@ export default function PromoterDetailScreen() {
                         .replace(/\n$/, "");
                     };
 
-                    return (
-                      <View
-                        key={alert.NotificationID || index}
-                        style={[
-                          styles.alertCard,
-                          { backgroundColor: getThemeColor() + "10" },
-                        ]}
-                      >
+                    const alertId =
+                      alert.NotificationID ||
+                      alert.id ||
+                      `promoter-alert-${index}`;
+                    const alertImageUrl =
+                      alert.image ||
+                      alert.notification_image ||
+                      alert.image_url ||
+                      null;
+                    const hasImage = !!alertImageUrl;
+                    const isExpanded = expandedPromoterAlertId === alertId;
+
+                    const cardContent = (
+                      <>
                         <View
                           style={[
                             styles.alertIconContainer,
@@ -649,12 +710,62 @@ export default function PromoterDetailScreen() {
                                 {alert.notification_type || "Alert"}
                               </Text>
                             </View>
-                            <Text style={styles.alertTime}>{timeStr}</Text>
+                            <View style={styles.alertHeaderRight}>
+                              <Text style={styles.alertTime}>{timeStr}</Text>
+                              {hasImage &&
+                                (isExpanded ? (
+                                  <ChevronUp
+                                    size={18}
+                                    color={getThemeColor()}
+                                    style={styles.alertChevron}
+                                  />
+                                ) : (
+                                  <ChevronDown
+                                    size={18}
+                                    color={getThemeColor()}
+                                    style={styles.alertChevron}
+                                  />
+                                ))}
+                            </View>
                           </View>
                           <Text style={styles.alertMessage}>
                             {getNotificationMessage() || "No message"}
                           </Text>
+                          {hasImage && isExpanded && (
+                            <View style={styles.recentAlertImageWrap}>
+                              <Image
+                                source={{ uri: alertImageUrl }}
+                                style={styles.recentAlertImage}
+                              />
+                            </View>
+                          )}
                         </View>
+                      </>
+                    );
+
+                    return (
+                      <View
+                        key={alertId}
+                        style={[
+                          styles.alertCard,
+                          { backgroundColor: getThemeColor() + "10" },
+                        ]}
+                      >
+                        {hasImage ? (
+                          <TouchableOpacity
+                            style={styles.alertCardTouchable}
+                            onPress={() =>
+                              setExpandedPromoterAlertId(
+                                isExpanded ? null : alertId,
+                              )
+                            }
+                            activeOpacity={0.8}
+                          >
+                            {cardContent}
+                          </TouchableOpacity>
+                        ) : (
+                          cardContent
+                        )}
                       </View>
                     );
                   })
@@ -787,42 +898,58 @@ export default function PromoterDetailScreen() {
                   </View>
 
                   <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Image (optional)</Text>
+                    <View style={styles.imageActionsRow}>
+                      <TouchableOpacity
+                        style={styles.imageButton}
+                        onPress={handlePickAlertImage}
+                      >
+                        <Text style={styles.imageButtonText}>
+                          {alertNotificationImage
+                            ? "Change Image"
+                            : "Upload Image"}
+                        </Text>
+                      </TouchableOpacity>
+                      {alertNotificationImage ? (
+                        <TouchableOpacity
+                          style={styles.removeImageButton}
+                          onPress={handleRemoveAlertImage}
+                        >
+                          <Text style={styles.removeImageText}>Remove</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                    {alertNotificationImage ? (
+                      <Image
+                        source={{ uri: alertNotificationImage.uri }}
+                        style={styles.alertImagePreview}
+                      />
+                    ) : null}
+                  </View>
+
+                  <View style={styles.inputGroup}>
                     <Text style={styles.inputLabel}>Notification Icon</Text>
-                    <View style={styles.iconPickerGrid}>
+                    <Select
+                      value={alertNotificationIcon}
+                      onValueChange={setAlertNotificationIcon}
+                    >
                       {NOTIFICATION_ICONS.map((iconOption) => {
                         const IconComponent = iconOption.icon;
-                        const isSelected =
-                          alertNotificationIcon === iconOption.number;
                         return (
-                          <TouchableOpacity
+                          <SelectItem
                             key={iconOption.number}
-                            style={[
-                              styles.iconPickerButton,
-                              isSelected && {
-                                backgroundColor: getThemeColor() + "30",
-                                borderColor: getThemeColor(),
-                              },
-                            ]}
-                            onPress={() =>
-                              setAlertNotificationIcon(iconOption.number)
-                            }
+                            value={iconOption.number}
                           >
-                            <IconComponent
-                              size={20}
-                              color={isSelected ? getThemeColor() : "#737373"}
-                            />
-                            <Text
-                              style={[
-                                styles.iconPickerLabel,
-                                isSelected && { color: getThemeColor() },
-                              ]}
-                            >
-                              {iconOption.label}
-                            </Text>
-                          </TouchableOpacity>
+                            <View style={styles.iconSelectRow}>
+                              <IconComponent size={18} color="#e5e7eb" />
+                              <Text style={styles.iconSelectLabel}>
+                                {iconOption.label}
+                              </Text>
+                            </View>
+                          </SelectItem>
                         );
                       })}
-                    </View>
+                    </Select>
                   </View>
                 </View>
 
@@ -1225,6 +1352,31 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 6,
   },
+  alertHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  alertChevron: {
+    marginLeft: 4,
+  },
+  alertCardTouchable: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    width: "100%",
+  },
+  recentAlertImageWrap: {
+    marginTop: 12,
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  recentAlertImage: {
+    width: "100%",
+    height: 180,
+    backgroundColor: "#0b0f19",
+  },
   alertBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1334,6 +1486,42 @@ const styles = StyleSheet.create({
     minHeight: 100,
     paddingTop: 12,
   },
+  imageActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 8,
+  },
+  imageButton: {
+    backgroundColor: "#0a0a0a",
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  imageButtonText: {
+    color: "#fafafa",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  removeImageButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  removeImageText: {
+    color: "#ef4444",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  alertImagePreview: {
+    width: "100%",
+    height: 160,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    backgroundColor: "#0a0a0a",
+  },
   modalFooter: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -1388,6 +1576,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#737373",
     marginTop: 4,
+  },
+  iconSelectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  iconSelectLabel: {
+    color: "#e5e7eb",
+    fontSize: 14,
   },
   actionMenuOverlay: {
     flex: 1,

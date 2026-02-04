@@ -1,8 +1,14 @@
-import { sendEventAlert, sendPromoterAlert } from "@/lib/api";
+import {
+  NotificationImageUpload,
+  sendEventAlert,
+  sendPromoterAlert,
+} from "@/lib/api";
+import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+  Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -33,7 +39,42 @@ export const CreateNotificationModal = ({
   const [message, setMessage] = useState("");
   const [notificationType, setNotificationType] = useState("");
   const [notificationIcon, setNotificationIcon] = useState("1");
+  const [notificationImage, setNotificationImage] =
+    useState<NotificationImageUpload | null>(null);
   const [isSending, setIsSending] = useState(false);
+
+  const handlePickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        "Permission needed",
+        "Please allow photo library access to upload an image.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.9,
+    });
+
+    if (result.canceled || !result.assets?.[0]) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    const uri = asset.uri;
+    const name =
+      asset.fileName || uri.split("/").pop() || `alert-${Date.now()}.jpg`;
+    const type = asset.mimeType || "image/jpeg";
+
+    setNotificationImage({ uri, name, type });
+  };
+
+  const handleRemoveImage = () => {
+    setNotificationImage(null);
+  };
 
   const handleSubmit = async () => {
     if (!message.trim() || !notificationType.trim()) {
@@ -50,6 +91,7 @@ export const CreateNotificationModal = ({
           notificationType.trim(),
           message.trim(),
           notificationIcon,
+          notificationImage,
         );
       } else if (promoterId) {
         // Send promoter alert
@@ -58,6 +100,7 @@ export const CreateNotificationModal = ({
           notificationType.trim(),
           message.trim(),
           notificationIcon,
+          notificationImage,
         );
       } else {
         throw new Error("Missing event or promoter ID");
@@ -67,6 +110,7 @@ export const CreateNotificationModal = ({
       setMessage("");
       setNotificationType("");
       setNotificationIcon("1");
+      setNotificationImage(null);
       onClose();
     } catch (error) {
       console.error("Failed to send notification:", error);
@@ -110,6 +154,37 @@ export const CreateNotificationModal = ({
               numberOfLines={4}
               textAlignVertical="top"
             />
+          </View>
+
+          <View style={styles.imageSection}>
+            <Text style={styles.inputLabel}>Notification Image (optional)</Text>
+            <Button
+              variant="outline"
+              onPress={handlePickImage}
+              style={styles.imageButton}
+            >
+              {notificationImage ? "Change Image" : "Upload Image"}
+            </Button>
+            {notificationImage ? (
+              <View style={styles.imagePreview}>
+                <Image
+                  source={{ uri: notificationImage.uri }}
+                  style={styles.previewImage}
+                />
+                <View style={styles.imageActions}>
+                  <Text style={styles.imageName} numberOfLines={1}>
+                    {notificationImage.name}
+                  </Text>
+                  <Button
+                    variant="ghost"
+                    onPress={handleRemoveImage}
+                    style={styles.removeImageButton}
+                  >
+                    Remove
+                  </Button>
+                </View>
+              </View>
+            ) : null}
           </View>
 
           <NotificationIconPicker
@@ -188,6 +263,34 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     color: "#fff",
     fontSize: 16,
+  },
+  imageSection: {
+    gap: 8,
+  },
+  imageButton: {
+    alignSelf: "flex-start",
+  },
+  imagePreview: {
+    backgroundColor: "#111827",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#374151",
+    overflow: "hidden",
+  },
+  previewImage: {
+    width: "100%",
+    height: 160,
+  },
+  imageActions: {
+    padding: 12,
+    gap: 8,
+  },
+  imageName: {
+    color: "#d1d5db",
+    fontSize: 12,
+  },
+  removeImageButton: {
+    alignSelf: "flex-start",
   },
   hint: {
     fontSize: 12,

@@ -1,5 +1,6 @@
 import { AdminControls } from "@/components/admin-controls";
 import { Button } from "@/components/ui/button";
+import { Select, SelectItem } from "@/components/ui/select";
 import { useAdmin } from "@/contexts/AdminContext";
 import type { Event } from "@/data/mockData";
 import {
@@ -10,6 +11,7 @@ import {
     getEvents,
     hexToHsl,
     hslToHex,
+  NotificationImageUpload,
     sendEventAlert,
     setEventColor,
     subscribeToEvent,
@@ -18,6 +20,7 @@ import {
 import { formatTime } from "@/lib/dateUtils";
 import { getNotificationIcon, NOTIFICATION_ICONS } from "@/lib/icon-utils";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import {
     AlertTriangle,
     ArrowLeft,
@@ -25,7 +28,9 @@ import {
     Calendar,
     Camera,
     Car,
+    ChevronDown,
     ChevronRight,
+    ChevronUp,
     Clock,
     CreditCard,
     ExternalLink,
@@ -102,16 +107,25 @@ interface ExtendedEvent extends Event {
 }
 
 export default function EventDetailScreen() {
-  const { id, eventData } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     id: string;
     eventData?: string;
   }>();
+  const rawId = params.id;
+  const id = typeof rawId === "string" ? rawId : Array.isArray(rawId) ? rawId[0] : undefined;
+  const eventData = params.eventData;
   const router = useRouter();
 
-  // Initialize with data passed from list page if available
-  const initialEvent: ExtendedEvent | undefined = eventData
-    ? JSON.parse(eventData)
-    : undefined;
+  // Initialize with data passed from list page if available (safe parse to avoid crash)
+  let initialEvent: ExtendedEvent | undefined;
+  try {
+    initialEvent =
+      typeof eventData === "string" && eventData.trim()
+        ? (JSON.parse(eventData) as ExtendedEvent)
+        : undefined;
+  } catch {
+    initialEvent = undefined;
+  }
 
   const [event, setEvent] = useState<ExtendedEvent | undefined>(initialEvent);
   const [isLoading, setIsLoading] = useState(!initialEvent);
@@ -136,9 +150,14 @@ export default function EventDetailScreen() {
   const [alertNotificationType, setAlertNotificationType] = useState("");
   const [alertNotificationMessage, setAlertNotificationMessage] = useState("");
   const [alertNotificationIcon, setAlertNotificationIcon] = useState("1");
+  const [alertNotificationImage, setAlertNotificationImage] =
+    useState<NotificationImageUpload | null>(null);
   const [isSendingAlert, setIsSendingAlert] = useState(false);
   const [showAdminActionMenu, setShowAdminActionMenu] = useState(false);
   const [showAllAlerts, setShowAllAlerts] = useState(false);
+  const [expandedEventAlertId, setExpandedEventAlertId] = useState<
+    string | null
+  >(null);
 
   // Prefill URL with https:// when modal opens
   useEffect(() => {
@@ -148,6 +167,7 @@ export default function EventDetailScreen() {
   }, [showAddLinkModal]);
 
   useEffect(() => {
+    if (!id) return;
     loadEventDetails();
     loadQuickLinks();
     loadEventAlerts();
@@ -155,6 +175,7 @@ export default function EventDetailScreen() {
   }, [id]);
 
   const loadQuickLinks = async () => {
+    if (!id) return;
     try {
       const data = await getEventQuickLinks(id);
 
@@ -242,6 +263,7 @@ export default function EventDetailScreen() {
         alertNotificationType.trim(),
         alertNotificationMessage.trim(),
         alertNotificationIcon,
+        alertNotificationImage,
       );
       // Reload alerts
       await loadEventAlerts();
@@ -249,6 +271,7 @@ export default function EventDetailScreen() {
       setAlertNotificationType("");
       setAlertNotificationMessage("");
       setAlertNotificationIcon("1");
+      setAlertNotificationImage(null);
       setShowSendAlertModal(false);
     } catch (err) {
       // Error handled silently or could show alert
@@ -257,7 +280,37 @@ export default function EventDetailScreen() {
     }
   };
 
+  const handlePickAlertImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.9,
+    });
+
+    if (result.canceled || !result.assets?.[0]) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    const uri = asset.uri;
+    const name =
+      asset.fileName || uri.split("/").pop() || `alert-${Date.now()}.jpg`;
+    const type = asset.mimeType || "image/jpeg";
+
+    setAlertNotificationImage({ uri, name, type });
+  };
+
+  const handleRemoveAlertImage = () => {
+    setAlertNotificationImage(null);
+  };
+
   const loadEventAlerts = async () => {
+    if (!id) return;
     try {
       const data = await getEventAlerts(id);
 
@@ -277,6 +330,7 @@ export default function EventDetailScreen() {
   };
 
   const loadEventDetails = async () => {
+    if (!id) return;
     try {
       if (!event) {
         setIsLoading(true);
@@ -576,6 +630,17 @@ export default function EventDetailScreen() {
     // Fallback icon
     return Link2;
   };
+
+  if (!id) {
+    return (
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Invalid event</Text>
+          <Button onPress={() => router.back()}>Go Back</Button>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -952,14 +1017,18 @@ export default function EventDetailScreen() {
                         .replace(/\n$/, "");
                     };
 
-                    return (
-                      <View
-                        key={alert.NotificationID || index}
-                        style={[
-                          styles.alertCard,
-                          { backgroundColor: getThemeColor() + "10" },
-                        ]}
-                      >
+                    const alertId =
+                      alert.NotificationID || alert.id || `event-alert-${index}`;
+                    const alertImageUrl =
+                      alert.image ||
+                      alert.notification_image ||
+                      alert.image_url ||
+                      null;
+                    const hasImage = !!alertImageUrl;
+                    const isExpanded = expandedEventAlertId === alertId;
+
+                    const cardContent = (
+                      <>
                         <View
                           style={[
                             styles.alertIconContainer,
@@ -985,12 +1054,60 @@ export default function EventDetailScreen() {
                                 {alert.notification_type || "Alert"}
                               </Text>
                             </View>
-                            <Text style={styles.alertTime}>{timeStr}</Text>
+                            <View style={styles.alertHeaderRight}>
+                              <Text style={styles.alertTime}>{timeStr}</Text>
+                              {hasImage &&
+                                (isExpanded ? (
+                                  <ChevronUp
+                                    size={18}
+                                    color={getThemeColor()}
+                                    style={styles.alertChevron}
+                                  />
+                                ) : (
+                                  <ChevronDown
+                                    size={18}
+                                    color={getThemeColor()}
+                                    style={styles.alertChevron}
+                                  />
+                                ))}
+                            </View>
                           </View>
                           <Text style={styles.alertMessage}>
                             {getNotificationMessage() || "No message"}
                           </Text>
+                          {hasImage && isExpanded && (
+                            <View style={styles.recentAlertImageWrap}>
+                              <Image
+                                source={{ uri: alertImageUrl }}
+                                style={styles.recentAlertImage}
+                              />
+                            </View>
+                          )}
                         </View>
+                      </>
+                    );
+
+                    return (
+                      <View
+                        key={alertId}
+                        style={[
+                          styles.alertCard,
+                          { backgroundColor: getThemeColor() + "10" },
+                        ]}
+                      >
+                        {hasImage ? (
+                          <TouchableOpacity
+                            style={styles.alertCardTouchable}
+                            onPress={() =>
+                              setExpandedEventAlertId(isExpanded ? null : alertId)
+                            }
+                            activeOpacity={0.8}
+                          >
+                            {cardContent}
+                          </TouchableOpacity>
+                        ) : (
+                          cardContent
+                        )}
                       </View>
                     );
                   })
@@ -1068,42 +1185,58 @@ export default function EventDetailScreen() {
                   </View>
 
                   <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Image (optional)</Text>
+                    <View style={styles.imageActionsRow}>
+                      <TouchableOpacity
+                        style={styles.imageButton}
+                        onPress={handlePickAlertImage}
+                      >
+                        <Text style={styles.imageButtonText}>
+                          {alertNotificationImage
+                            ? "Change Image"
+                            : "Upload Image"}
+                        </Text>
+                      </TouchableOpacity>
+                      {alertNotificationImage ? (
+                        <TouchableOpacity
+                          style={styles.removeImageButton}
+                          onPress={handleRemoveAlertImage}
+                        >
+                          <Text style={styles.removeImageText}>Remove</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                    {alertNotificationImage ? (
+                      <Image
+                        source={{ uri: alertNotificationImage.uri }}
+                        style={styles.alertImagePreview}
+                      />
+                    ) : null}
+                  </View>
+
+                  <View style={styles.inputGroup}>
                     <Text style={styles.inputLabel}>Notification Icon</Text>
-                    <View style={styles.iconPickerGrid}>
+                    <Select
+                      value={alertNotificationIcon}
+                      onValueChange={setAlertNotificationIcon}
+                    >
                       {NOTIFICATION_ICONS.map((iconOption) => {
                         const IconComponent = iconOption.icon;
-                        const isSelected =
-                          alertNotificationIcon === iconOption.number;
                         return (
-                          <TouchableOpacity
+                          <SelectItem
                             key={iconOption.number}
-                            style={[
-                              styles.iconPickerButton,
-                              isSelected && {
-                                backgroundColor: getThemeColor() + "30",
-                                borderColor: getThemeColor(),
-                              },
-                            ]}
-                            onPress={() =>
-                              setAlertNotificationIcon(iconOption.number)
-                            }
+                            value={iconOption.number}
                           >
-                            <IconComponent
-                              size={20}
-                              color={isSelected ? getThemeColor() : "#737373"}
-                            />
-                            <Text
-                              style={[
-                                styles.iconPickerLabel,
-                                isSelected && { color: getThemeColor() },
-                              ]}
-                            >
-                              {iconOption.label}
-                            </Text>
-                          </TouchableOpacity>
+                            <View style={styles.iconSelectRow}>
+                              <IconComponent size={18} color="#e5e7eb" />
+                              <Text style={styles.iconSelectLabel}>
+                                {iconOption.label}
+                              </Text>
+                            </View>
+                          </SelectItem>
                         );
                       })}
-                    </View>
+                    </Select>
                   </View>
                 </View>
 
@@ -1720,6 +1853,31 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 6,
   },
+  alertHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  alertChevron: {
+    marginLeft: 4,
+  },
+  alertCardTouchable: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    width: "100%",
+  },
+  recentAlertImageWrap: {
+    marginTop: 12,
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  recentAlertImage: {
+    width: "100%",
+    height: 180,
+    backgroundColor: "#0b0f19",
+  },
   alertBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1840,6 +1998,42 @@ const styles = StyleSheet.create({
     color: "#737373",
     marginTop: 6,
   },
+  imageActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 8,
+  },
+  imageButton: {
+    backgroundColor: "#0a0a0a",
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  imageButtonText: {
+    color: "#fafafa",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  removeImageButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  removeImageText: {
+    color: "#ef4444",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  alertImagePreview: {
+    width: "100%",
+    height: 160,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    backgroundColor: "#0a0a0a",
+  },
   iconPreviewContainer: {
     alignItems: "center",
     marginBottom: 20,
@@ -1921,5 +2115,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#737373",
     marginTop: 4,
+  },
+  iconSelectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  iconSelectLabel: {
+    color: "#e5e7eb",
+    fontSize: 14,
   },
 });

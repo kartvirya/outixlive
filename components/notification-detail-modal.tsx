@@ -2,6 +2,7 @@ import { getAlertDetails, getMyAlerts, markAlertAsRead } from "@/lib/api";
 import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
+  Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -20,6 +21,9 @@ interface NotificationData {
   notification: string;
   notification_message: string;
   alertinfo: string;
+  image?: string;
+  notification_image?: string;
+  image_url?: string;
 }
 
 interface NotificationDetailModalProps {
@@ -125,6 +129,14 @@ export const NotificationDetailModal = ({
                 "",
               alertinfo:
                 matchingAlert.alertinfo || matchingAlert.EventInfo || "",
+              image:
+                matchingAlert.image ||
+                matchingAlert.notification_image ||
+                matchingAlert.image_url ||
+                matchingAlert.imageUrl ||
+                "",
+              notification_image: matchingAlert.notification_image || "",
+              image_url: matchingAlert.image_url || matchingAlert.imageUrl || "",
             };
           } else {
             console.log(
@@ -244,6 +256,25 @@ export const NotificationDetailModal = ({
               </View>
             )}
 
+            {/* Image */}
+            {(notificationData.image ||
+              notificationData.notification_image ||
+              notificationData.image_url) && (
+              <View style={styles.section}>
+                <Text style={styles.label}>Image</Text>
+                <Image
+                  source={{
+                    uri:
+                      notificationData.image ||
+                      notificationData.notification_image ||
+                      notificationData.image_url ||
+                      "",
+                  }}
+                  style={styles.alertImage}
+                />
+              </View>
+            )}
+
             {/* Alert Info */}
             {notificationData.alertinfo && (
               <View style={styles.section}>
@@ -338,6 +369,14 @@ const styles = StyleSheet.create({
     color: "#e5e7eb",
     fontSize: 16,
     lineHeight: 24,
+  },
+  alertImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#1f2937",
+    backgroundColor: "#0b0f19",
   },
   date: {
     color: "#d1d5db",

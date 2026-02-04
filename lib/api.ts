@@ -330,6 +330,12 @@ export const parseApiResponse = async <T = any>(
   return data.data || data;
 };
 
+export interface NotificationImageUpload {
+  uri: string;
+  name: string;
+  type: string;
+}
+
 // ============================================================================
 // AUTH API
 // ============================================================================
@@ -774,6 +780,49 @@ export const unsubscribeFromPromoter = async (id: string) => {
  * Get promoter alerts
  * POST /promoters/alerts/{id}
  */
+export const mapAlertResponse = (alert: any) => {
+  if (!alert) return alert;
+
+  const image =
+    alert.image ||
+    alert.notification_image ||
+    alert.image_url ||
+    alert.imageUrl ||
+    null;
+
+  return {
+    ...alert,
+    image,
+    notification_image: image,
+    image_url: image,
+  };
+};
+
+export const mapAlertListResponse = (data: any) => {
+  if (Array.isArray(data)) {
+    return data.map(mapAlertResponse);
+  }
+
+  if (data && typeof data === "object") {
+    const keys = ["msg", "alerts", "notifications", "data"];
+    const cloned = { ...data };
+    keys.forEach((key) => {
+      if (Array.isArray(cloned[key])) {
+        cloned[key] = cloned[key].map(mapAlertResponse);
+      }
+    });
+    cloned.image =
+      cloned.image || cloned.notification_image || cloned.image_url || null;
+    if (cloned.image) {
+      cloned.notification_image = cloned.image;
+      cloned.image_url = cloned.image;
+    }
+    return cloned;
+  }
+
+  return data;
+};
+
 export const getPromoterAlerts = async (id: string) => {
   try {
     const deviceToken = await getDeviceToken();
@@ -810,7 +859,8 @@ export const getPromoterAlerts = async (id: string) => {
       );
     }
 
-    return parseApiResponse(response);
+    const parsed = await parseApiResponse(response);
+    return mapAlertListResponse(parsed);
   } catch (error) {
     if (error instanceof TypeError && error.message === "Failed to fetch") {
       throw new Error(
@@ -879,7 +929,7 @@ export const getMyAlerts = async () => {
     }
 
     const parsed = await parseApiResponse(response);
-    return parsed;
+    return mapAlertListResponse(parsed);
   } catch (error) {
     if (error instanceof TypeError && error.message === "Failed to fetch") {
       throw new Error(
@@ -1020,6 +1070,7 @@ export const sendPromoterAlert = async (
   notificationType: string,
   notificationMessage: string,
   notificationIcon: string,
+  notificationImage?: NotificationImageUpload | null,
 ) => {
   try {
     const authToken = await getAuthToken();
@@ -1039,6 +1090,9 @@ export const sendPromoterAlert = async (
     formdata.append("notification_type", notificationType);
     formdata.append("notification_message", notificationMessage);
     formdata.append("notification_icon", notificationIcon);
+    if (notificationImage) {
+      formdata.append("image", notificationImage as any);
+    }
 
     const requestOptions: RequestInit = {
       method: "POST",
@@ -1541,7 +1595,8 @@ export const getEventAlerts = async (id: string) => {
       );
     }
 
-    return parseApiResponse(response);
+    const parsed = await parseApiResponse(response);
+    return mapAlertListResponse(parsed);
   } catch (error) {
     if (error instanceof TypeError && error.message === "Failed to fetch") {
       throw new Error(
@@ -1563,6 +1618,7 @@ export const sendEventAlert = async (
   notificationType: string,
   notificationMessage: string,
   notificationIcon: string,
+  notificationImage?: NotificationImageUpload | null,
 ) => {
   try {
     const authToken = await getAuthToken();
@@ -1583,6 +1639,9 @@ export const sendEventAlert = async (
     formdata.append("notification_message", notificationMessage);
     formdata.append("notification_icon", notificationIcon);
     formdata.append("event", eventId);
+    if (notificationImage) {
+      formdata.append("image", notificationImage as any);
+    }
 
     const requestOptions: RequestInit = {
       method: "POST",

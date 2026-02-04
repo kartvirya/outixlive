@@ -13,10 +13,23 @@ interface SelectItemProps {
   children: React.ReactNode;
 }
 
+const renderSelectContent = (
+  content: React.ReactNode,
+  textStyle: any,
+  wrapperStyle: any,
+) => {
+  if (typeof content === 'string' || typeof content === 'number') {
+    return <Text style={textStyle}>{content}</Text>;
+  }
+
+  return <View style={wrapperStyle}>{content}</View>;
+};
+
 export const Select = ({ value, onValueChange, children }: SelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const items = React.Children.toArray(children) as React.ReactElement<SelectItemProps>[];
   const selectedItem = items.find(item => item.props.value === value);
+  const selectedContent = selectedItem ? selectedItem.props.children : 'Select...';
 
   return (
     <>
@@ -24,9 +37,11 @@ export const Select = ({ value, onValueChange, children }: SelectProps) => {
         style={styles.trigger}
         onPress={() => setIsOpen(true)}
       >
-        <Text style={styles.triggerText}>
-          {selectedItem ? selectedItem.props.children : 'Select...'}
-        </Text>
+        {renderSelectContent(
+          selectedContent,
+          styles.triggerText,
+          styles.triggerContent,
+        )}
         <ChevronDown size={16} color="#737373" />
       </TouchableOpacity>
 
@@ -55,14 +70,14 @@ export const Select = ({ value, onValueChange, children }: SelectProps) => {
                     setIsOpen(false);
                   }}
                 >
-                  <Text
-                    style={[
+                  {renderSelectContent(
+                    item.props.children,
+                    [
                       styles.itemText,
                       value === item.props.value && styles.itemTextSelected,
-                    ]}
-                  >
-                    {item.props.children}
-                  </Text>
+                    ],
+                    styles.itemContent,
+                  )}
                   {value === item.props.value && (
                     <Check size={16} color="#22c55e" />
                   )}
@@ -109,6 +124,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     flex: 1,
   },
+  triggerContent: {
+    flex: 1,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -140,5 +158,8 @@ const styles = StyleSheet.create({
   itemTextSelected: {
     color: '#22c55e',
     fontWeight: '600',
+  },
+  itemContent: {
+    flex: 1,
   },
 });

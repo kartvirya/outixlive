@@ -13,7 +13,7 @@ import {
     Wrench,
 } from "lucide-react-native";
 import React, { useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export type NotificationType =
   | "event"
@@ -41,6 +41,7 @@ export interface ExpandableNotification {
   serviceAmount?: number;
   pitNumber?: string;
   details?: string;
+  imageUrl?: string;
 }
 
 interface ExpandableNotificationItemProps extends ExpandableNotification {
@@ -142,6 +143,7 @@ export const ExpandableNotificationItem = ({
   serviceAmount,
   pitNumber,
   details,
+  imageUrl,
   onMarkRead,
   onLongPress,
 }: ExpandableNotificationItemProps) => {
@@ -201,6 +203,12 @@ export const ExpandableNotificationItem = ({
             <Text style={styles.eventName} numberOfLines={1}>
               {eventName}
             </Text>
+          )}
+
+          {isOpen && imageUrl && (
+            <View style={styles.imageWrapper}>
+              <Image source={{ uri: imageUrl }} style={styles.alertImage} />
+            </View>
           )}
 
           {isOpen && (type === "service_request" || details) && (
@@ -414,5 +422,17 @@ const styles = StyleSheet.create({
     color: "#d1d5db",
     lineHeight: 19,
     marginTop: 4,
+  },
+  imageWrapper: {
+    marginTop: 12,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  alertImage: {
+    width: "100%",
+    height: 180,
+    backgroundColor: "#0b0f19",
   },
 });

@@ -110,6 +110,12 @@ export default function AlertsScreen() {
             userId: undefined,
             isRead,
             details: a.alertinfo || undefined,
+            imageUrl:
+              a.image ||
+              a.notification_image ||
+              a.image_url ||
+              a.imageUrl ||
+              undefined,
           };
         });
 
