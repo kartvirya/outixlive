@@ -1,4 +1,3 @@
-import * as Notifications from "expo-notifications";
 import { useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 
@@ -8,7 +7,7 @@ export function QuickPushTest() {
   const sendTestNotification = async () => {
     setIsScheduling(true);
     try {
-      // Schedule a local notification that mimics your AWS SNS payload
+      const Notifications = await import("expo-notifications");
       await Notifications.scheduleNotificationAsync({
         content: {
           title: "Test Class Call",

@@ -9,26 +9,22 @@ import { useLocationPermission } from "@/hooks/useLocationPermission";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { verifyConfiguration } from "@/lib/verifyConfig";
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
-import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
 import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
 import "../global.css";
+import { initializeFirebaseMessagingHandler } from "@/lib/firebaseMessagingHandler";
 
-// CRITICAL: Configure notification handler BEFORE anything else
-// This MUST be called at module level, not inside a component
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Initialize FCM handler for SNS/direct FCM notifications (Android)
+initializeFirebaseMessagingHandler();
+
+// Notification handler setup moved to useEffect - expo-notifications Android push
+// was removed from Expo Go in SDK 53, so we use dynamic import
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -357,6 +353,30 @@ export default function RootLayout() {
     }
   }, [segments, isNavigationReady]);
 
+  // Setup notification handler - dynamic import for Expo Go compatibility
+  useEffect(() => {
+    const setup = async () => {
+      if (Platform.OS === "android" && Constants.appOwnership === "expo") {
+        return; // Expo Go on Android - notifications not supported in SDK 53+
+      }
+      try {
+        const Notifications = await import("expo-notifications");
+        Notifications.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: true,
+            shouldShowBanner: true,
+            shouldShowList: true,
+          }),
+        });
+      } catch {
+        // Expo Go or notifications not available
+      }
+    };
+    setup();
+  }, []);
+
   useEffect(() => {
     // Verify configuration on app start (only in development)
     if (__DEV__) {
@@ -393,6 +413,7 @@ export default function RootLayout() {
         }
 
         try {
+          const Notifications = await import("expo-notifications");
           const response =
             await Notifications.getLastNotificationResponseAsync();
           if (response) {
@@ -512,7 +533,11 @@ export default function RootLayout() {
 
   // Direct notification listener - captures notification data when received
   useEffect(() => {
-    const subscription = Notifications.addNotificationReceivedListener(
+    let subscription: { remove: () => void } | null = null;
+    const setup = async () => {
+      try {
+        const Notifications = await import("expo-notifications");
+        subscription = Notifications.addNotificationReceivedListener(
       (notification) => {
         // Get all content fields
         const content = notification.request.content;
@@ -561,13 +586,21 @@ export default function RootLayout() {
         );
       },
     );
-
-    return () => subscription.remove();
+      } catch {
+        // Expo Go - notifications not available
+      }
+    };
+    setup();
+    return () => subscription?.remove();
   }, [isReadyForNotifications, handleNotificationData]);
 
   // Notification response listener - when user taps on notification
   useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(
+    let subscription: { remove: () => void } | null = null;
+    const setup = async () => {
+      try {
+        const Notifications = await import("expo-notifications");
+        subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
         const data = response.notification.request.content.data;
 
@@ -637,8 +670,12 @@ export default function RootLayout() {
         }
       },
     );
-
-    return () => subscription.remove();
+      } catch {
+        // Expo Go - notifications not available
+      }
+    };
+    setup();
+    return () => subscription?.remove();
   }, [isReadyForNotifications, handleNotificationData]);
 
   return (

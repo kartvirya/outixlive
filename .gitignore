@@ -35,6 +35,11 @@ yarn-error.*
 .env*.local
 .env.backend
 
+# Firebase (contains API keys - download from Firebase Console)
+google-services.json
+GoogleService-Info.plist
+*-firebase-adminsdk-*.json
+
 # typescript
 *.tsbuildinfo
 

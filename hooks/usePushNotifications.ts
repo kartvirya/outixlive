@@ -16,7 +16,6 @@ import {
   setupNotificationListeners,
   initializeIOSDeviceTokenListener,
 } from "@/lib/pushNotifications";
-import * as Notifications from "expo-notifications";
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 
@@ -24,7 +23,7 @@ export interface UsePushNotificationsResult {
   expoPushToken: string | null;
   nativePushToken: string | null; // Native APNs/FCM token for AWS SNS
   devicePushToken: { data: string; type: string } | null;
-  notification: Notifications.Notification | null;
+  notification: any | null;
   error: Error | null;
   isLoading: boolean;
   isBackendHealthy: boolean;
@@ -38,8 +37,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
     data: string;
     type: string;
   } | null>(null);
-  const [notification, setNotification] =
-    useState<Notifications.Notification | null>(null);
+  const [notification, setNotification] = useState<any | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isBackendHealthy, setIsBackendHealthy] = useState(false);
@@ -78,12 +76,14 @@ export function usePushNotifications(): UsePushNotificationsResult {
             console.log("[PUSH] 🏥 Checking local backend health...");
             const health = await checkBackendHealth();
             if (isMounted) {
-              setIsBackendHealthy(true);
+              setIsBackendHealthy(!!health);
               setBackendInfo(health);
-              console.log(
-                "[PUSH] ✅ Local backend is healthy:",
-                health.message,
-              );
+              if (health) {
+                console.log(
+                  "[PUSH] ✅ Local backend is healthy:",
+                  health.message,
+                );
+              }
             }
           } catch (healthError) {
             console.warn(
@@ -92,7 +92,6 @@ export function usePushNotifications(): UsePushNotificationsResult {
             );
             if (isMounted) {
               setIsBackendHealthy(false);
-              // Continue setup anyway - maybe backend will come online
             }
           }
         } else {
@@ -186,23 +185,21 @@ export function usePushNotifications(): UsePushNotificationsResult {
 
     setupPushNotifications();
 
-    // Setup notification listeners
-    const cleanup = setupNotificationListeners(
+    // Setup notification listeners (async - Expo Go compatibility)
+    let cleanup: () => void = () => {};
+    setupNotificationListeners(
       (notification) => {
         setNotification(notification);
       },
       (response) => {
-        // Handle notification tap
         console.log("[PUSH] 👆 User tapped notification:", response);
-        
-        // Extract notification data
         const notificationData = response.notification.request.content;
         console.log("[PUSH] 📦 Notification data:", notificationData.data);
-        
-        // Pass the notification to state so _layout can handle showing the modal
         setNotification(response.notification);
       },
-    );
+    ).then((c) => {
+      cleanup = c;
+    });
 
     return () => {
       isMounted = false;

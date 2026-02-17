@@ -1,39 +1,63 @@
 /**
  * Device Token Management
  *
- * Uses iOS native device token (APNs token) from Apple for all device identification.
+ * Platform-specific token generation:
+ * - iOS: Uses APNs token from Apple (Expo Notifications or iOS AppDelegate)
+ * - Android: Uses FCM token via FirebaseMessaging.getInstance().getToken()
+ *
  * The token is:
- * - Generated via Expo Notifications or iOS AppDelegate
- * - Stored in AsyncStorage as 'APNsDeviceToken'
+ * - Stored in AsyncStorage as 'DeviceToken' (or 'APNsDeviceToken' for iOS compatibility)
  * - Persists across app reloads, restarts, and kills
  * - Cleared only when app is uninstalled
- * - Uses in-memory cache and prevents race conditions
+ * - Prevents race conditions during retrieval
  * - Same token used everywhere in the app
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-// Use the same storage key as iosDeviceTokenManager
-const APNS_DEVICE_TOKEN_KEY = "APNsDeviceToken";
+// expo-notifications: Use dynamic import - Android push was removed from Expo Go in SDK 53
 
-// Hardcoded device token for browser/web testing
-const BROWSER_TEST_TOKEN =
-  "f0b30087cd2b325360077f2122fb94a3965773215a09d7de082a4a922e6ecb20";
+// Use the same storage key as iosDeviceTokenManager for iOS
+const APNS_DEVICE_TOKEN_KEY = "APNsDeviceToken";
+// FCM token storage key for Android
+const FCM_DEVICE_TOKEN_KEY = "FCMDeviceToken";
 
 /**
- * Generate a random 64-character hex token (matches iOS APNs token format)
- * Used for debugging when real token is not available
+ * Get FCM device token for Android using FirebaseMessaging.getInstance().getToken()
+ * This is the recommended way to get the FCM registration token on Android
  */
-const generateRandomToken = (): string => {
-  const chars = "0123456789abcdef";
-  let token = "";
-  for (let i = 0; i < 64; i++) {
-    token += chars.charAt(Math.floor(Math.random() * chars.length));
+const getFirebaseDeviceToken = async (): Promise<string | null> => {
+  if (Platform.OS !== "android") return null;
+
+  try {
+    const messaging = (
+      await import("@react-native-firebase/messaging")
+    ).default;
+    if (typeof messaging !== "function") return null;
+    const token = await messaging().getToken();
+    if (token) {
+      console.log(
+        "[DEVICE-TOKEN] ✅ Got FCM token from Firebase:",
+        token.substring(0, 20) + "...",
+      );
+      console.log(
+        "[DEVICE-TOKEN] 📊 FCM token length:",
+        token.length,
+        "chars",
+      );
+      return token;
+    }
+    return null;
+  } catch (error) {
+    console.error(
+      "[DEVICE-TOKEN] ❌ Error getting Firebase FCM token:",
+      error,
+    );
+    return null;
   }
-  return token;
 };
 
 /**
@@ -50,6 +74,18 @@ const getExpoDeviceToken = async (): Promise<string | null> => {
     if (!Device.isDevice) {
       console.log(
         "[DEVICE-TOKEN] ⚠️ Not a physical device - Expo token not available",
+      );
+      return null;
+    }
+
+    // Dynamic import - expo-notifications Android push removed from Expo Go in SDK 53
+    let Notifications: typeof import("expo-notifications");
+    try {
+      Notifications = await import("expo-notifications");
+    } catch (e) {
+      console.warn(
+        "[DEVICE-TOKEN] ⚠️ expo-notifications not available (Expo Go?):",
+        (e as Error)?.message,
       );
       return null;
     }
@@ -84,37 +120,22 @@ const getExpoDeviceToken = async (): Promise<string | null> => {
   }
 };
 
-// In-memory cache to avoid multiple reads from AsyncStorage
-let cachedToken: string | null = null;
-
 // Promise to prevent race conditions during token retrieval
 let tokenRetrievalPromise: Promise<string> | null = null;
 
 /**
  * Get the device token - uses iOS native APNs token from Apple
  * Retrieves the token stored in AsyncStorage by iosDeviceTokenManager
- * Uses in-memory cache and prevents race conditions
- * For browser/web testing, returns a hardcoded token
+ * Prevents race conditions during token retrieval
  *
- * @returns Promise<string> - The iOS device token (APNs token from Apple) or hardcoded browser token
+ * @returns Promise<string> - The device token (APNs on iOS, FCM on Android)
  * @throws Error if token is not available
  */
 export const getDeviceToken = async (): Promise<string> => {
   console.log("[DEVICE-TOKEN] 🔍 getDeviceToken() called");
 
-  // For browser/web testing, use hardcoded token
   if (Platform.OS === "web") {
-    console.log("[DEVICE-TOKEN] 🌐 Web platform - returning hardcoded token");
-    return BROWSER_TEST_TOKEN;
-  }
-
-  // Return cached token if available
-  if (cachedToken) {
-    console.log(
-      "[DEVICE-TOKEN] ⚡ Returning cached token:",
-      cachedToken.substring(0, 20) + "...",
-    );
-    return cachedToken;
+    throw new Error("Device token not available on web platform");
   }
 
   // If token is currently being retrieved, wait for it
@@ -128,8 +149,25 @@ export const getDeviceToken = async (): Promise<string> => {
   // Start new token retrieval
   tokenRetrievalPromise = (async () => {
     try {
-      // Get iOS device token from AsyncStorage (same key used by iosDeviceTokenManager)
-      const token = await AsyncStorage.getItem(APNS_DEVICE_TOKEN_KEY);
+      const storageKey =
+        Platform.OS === "android" ? FCM_DEVICE_TOKEN_KEY : APNS_DEVICE_TOKEN_KEY;
+
+      // Get device token from AsyncStorage (platform-specific key)
+      let token = await AsyncStorage.getItem(storageKey);
+
+      // Android FCM tokens are ~150+ chars; 64-char tokens are stale random fallbacks - clear and refetch
+      if (
+        token &&
+        Platform.OS === "android" &&
+        token.length === 64 &&
+        /^[0-9a-f]{64}$/i.test(token)
+      ) {
+        console.log(
+          "[DEVICE-TOKEN] 🧹 Clearing stale 64-char token (was random fallback), refetching...",
+        );
+        await AsyncStorage.removeItem(storageKey);
+        token = null;
+      }
 
       console.log(
         "[DEVICE-TOKEN] 📋 AsyncStorage result:",
@@ -139,64 +177,62 @@ export const getDeviceToken = async (): Promise<string> => {
       if (!token) {
         console.warn("[DEVICE-TOKEN] ⚠️ No token found in AsyncStorage");
 
-        // Try to get real token from Expo Notifications first
-        console.log(
-          "[DEVICE-TOKEN] 🔄 Attempting to get real token from Expo...",
-        );
-        const expoToken = await getExpoDeviceToken();
+        let platformToken: string | null = null;
 
-        if (expoToken) {
-          console.log("[DEVICE-TOKEN] ✅ Got real token from Expo!");
+        if (Platform.OS === "android" && Constants.appOwnership !== "expo") {
+          // Android: Use Firebase when not in Expo Go (RNFBAppModule not available in Expo Go)
+          console.log(
+            "[DEVICE-TOKEN] 🔄 Attempting to get FCM token from Firebase...",
+          );
+          platformToken = await getFirebaseDeviceToken();
+        }
 
-          // Store the Expo token in AsyncStorage for future use
+        if (!platformToken) {
+          // iOS or Firebase fallback: Try Expo Notifications
+          console.log(
+            "[DEVICE-TOKEN] 🔄 Attempting to get token from Expo Notifications...",
+          );
+          platformToken = await getExpoDeviceToken();
+        }
+
+        if (platformToken) {
+          console.log("[DEVICE-TOKEN] ✅ Got real token!");
+          console.log(
+            "[DEVICE-TOKEN] 📱 GENERATED DEVICE TOKEN (full, for debugging):",
+            platformToken,
+          );
+
+          // Store the token in AsyncStorage for future use
           try {
-            await AsyncStorage.setItem(APNS_DEVICE_TOKEN_KEY, expoToken);
-            console.log("[DEVICE-TOKEN] 💾 Stored Expo token in AsyncStorage");
+            await AsyncStorage.setItem(storageKey, platformToken);
+            console.log(
+              "[DEVICE-TOKEN] 💾 Stored token in AsyncStorage (",
+              storageKey,
+              ")",
+            );
           } catch (error) {
             console.error(
-              "[DEVICE-TOKEN] ❌ Failed to store Expo token:",
+              "[DEVICE-TOKEN] ❌ Failed to store token:",
               error,
             );
           }
 
-          cachedToken = expoToken;
-          return expoToken;
+          return platformToken;
         }
 
-        // Fall back to random token only if Expo token is not available
-        console.warn(
-          "[DEVICE-TOKEN] 🔧 Expo token not available - generating random token for debugging",
+        throw new Error(
+          "Failed to get device token from Firebase or Expo Notifications",
         );
-
-        const randomToken = generateRandomToken();
-        console.log(
-          "[DEVICE-TOKEN] 🎲 Generated random token:",
-          randomToken.substring(0, 20) + "...",
-        );
-
-        // Store the random token in AsyncStorage so it persists for this session
-        try {
-          await AsyncStorage.setItem(APNS_DEVICE_TOKEN_KEY, randomToken);
-          console.log(
-            "[DEVICE-TOKEN] 💾 Stored random token in AsyncStorage for session persistence",
-          );
-        } catch (error) {
-          console.error(
-            "[DEVICE-TOKEN] ❌ Failed to store random token:",
-            error,
-          );
-        }
-
-        cachedToken = randomToken;
-        return randomToken;
       }
 
-      console.log("[DEVICE-TOKEN] ✅ Token retrieved successfully, caching...");
-      cachedToken = token;
+      console.log("[DEVICE-TOKEN] ✅ Token retrieved from AsyncStorage");
+      console.log(
+        "[DEVICE-TOKEN] 📱 DEVICE TOKEN (full, for debugging):",
+        token,
+      );
       return token;
     } catch (error) {
       console.error("[DEVICE-TOKEN] ❌ Error retrieving token:", error);
-      cachedToken = null; // Clear cache on error
       throw error;
     } finally {
       tokenRetrievalPromise = null; // Reset promise
@@ -210,13 +246,12 @@ export const getDeviceToken = async (): Promise<string> => {
 /**
  * Clear the device token (for testing/debugging only)
  * WARNING: This will break all subscriptions!
- * Clears both in-memory cache and AsyncStorage
+ * Clears AsyncStorage so next run fetches fresh token from Firebase/Expo
  */
 export const clearDeviceToken = async (): Promise<void> => {
   try {
-    // Clear AsyncStorage (same key used by iosDeviceTokenManager)
     await AsyncStorage.removeItem(APNS_DEVICE_TOKEN_KEY);
-    cachedToken = null; // Clear in-memory cache
+    await AsyncStorage.removeItem(FCM_DEVICE_TOKEN_KEY);
   } catch (error) {
     throw error;
   }

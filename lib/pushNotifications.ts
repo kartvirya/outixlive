@@ -10,8 +10,16 @@
 
 import Constants from "expo-constants";
 import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+
+// expo-notifications: Use dynamic import - Android push removed from Expo Go in SDK 53
+async function getNotifications() {
+  try {
+    return await import("expo-notifications");
+  } catch {
+    return null;
+  }
+}
 import {
   getOrCreateEndpointArn,
   registerTokenWithSNS,
@@ -35,6 +43,9 @@ import {
  * This should be called before getting push tokens
  */
 export async function requestNotificationPermissions() {
+  const Notifications = await getNotifications();
+  if (!Notifications) return false;
+
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
       name: "default",
@@ -92,6 +103,8 @@ export async function registerForPushNotificationsAsync() {
   }
 
   try {
+    const Notifications = await getNotifications();
+    if (!Notifications) return null;
     // Get native device token (APNs for iOS, FCM for Android)
     const devicePushToken = await Notifications.getDevicePushTokenAsync();
     const token = devicePushToken.data;
@@ -130,6 +143,8 @@ export async function getExpoPushTokenAsync() {
     }
 
     console.log("[EXPO-TOKEN] 📱 Requesting Expo push token from service...");
+    const Notifications = await getNotifications();
+    if (!Notifications) return null;
     const pushToken = await Notifications.getExpoPushTokenAsync({
       projectId,
     });
@@ -194,6 +209,8 @@ export async function getDevicePushToken() {
 
   // Check permissions first (should already be granted)
   console.log("[DEVICE-TOKEN] 🔍 Checking notification permissions...");
+  const Notifications = await getNotifications();
+  if (!Notifications) return null;
   const { status } = await Notifications.getPermissionsAsync();
   console.log(`[DEVICE-TOKEN] 📋 Permission status: ${status}`);
 
@@ -204,26 +221,77 @@ export async function getDevicePushToken() {
   console.log("[DEVICE-TOKEN] ✅ Permissions confirmed as granted");
 
   try {
-    console.log(
-      "[DEVICE-TOKEN] 📱 Requesting native device push token from system...",
-    );
-    // Get native device token (APNs for iOS, FCM for Android)
-    const devicePushToken = await Notifications.getDevicePushTokenAsync();
-    console.log(
-      `[DEVICE-TOKEN] 🎯 Token generation successful! Platform: ${devicePushToken.type}`,
-    );
+    let tokenData: string;
+    let tokenType: "ios" | "android";
+
+    if (Platform.OS === "android") {
+      // Skip Firebase in Expo Go - native module not available, causes RNFBAppModule error
+      const isExpoGo = Constants.appOwnership === "expo";
+      if (!isExpoGo) {
+        console.log(
+          "[DEVICE-TOKEN] 📱 Requesting FCM token from Firebase Messaging...",
+        );
+        try {
+          const messaging = (await import("@react-native-firebase/messaging"))
+            .default;
+        if (typeof messaging === "function") {
+          tokenData = await messaging().getToken();
+          tokenType = "android";
+          console.log(
+            "[DEVICE-TOKEN] 🎯 FCM token generation successful via Firebase!",
+          );
+        } else {
+          throw new Error("Firebase messaging not available");
+        }
+      } catch (firebaseError) {
+        console.warn(
+          "[DEVICE-TOKEN] ⚠️ Firebase unavailable, using Expo for FCM token:",
+          firebaseError?.message || firebaseError,
+        );
+        const NotificationsFallback = await getNotifications();
+        if (!NotificationsFallback) throw new Error("Expo notifications not available");
+        const devicePushToken =
+          await NotificationsFallback.getDevicePushTokenAsync();
+        tokenData = devicePushToken.data;
+        tokenType = devicePushToken.type as "ios" | "android";
+        console.log(
+          "[DEVICE-TOKEN] 🎯 FCM token obtained via Expo Notifications",
+        );
+      }
+      } else {
+        // Expo Go: Use Expo Notifications directly, skip Firebase
+        const NotificationsFallback = await getNotifications();
+        if (!NotificationsFallback) throw new Error("Expo notifications not available");
+        const devicePushToken =
+          await NotificationsFallback.getDevicePushTokenAsync();
+        tokenData = devicePushToken.data;
+        tokenType = devicePushToken.type as "ios" | "android";
+        console.log(
+          "[DEVICE-TOKEN] 🎯 FCM token obtained via Expo Notifications (Expo Go)",
+        );
+      }
+    } else {
+      // iOS: Use Expo Notifications for APNs token
+      console.log(
+        "[DEVICE-TOKEN] 📱 Requesting native device push token from system...",
+      );
+      const devicePushToken =
+        await Notifications.getDevicePushTokenAsync();
+      tokenData = devicePushToken.data;
+      tokenType = devicePushToken.type as "ios" | "android";
+      console.log(
+        `[DEVICE-TOKEN] 🎯 Token generation successful! Platform: ${devicePushToken.type}`,
+      );
+    }
 
     console.log(
       "[DEVICE-TOKEN] 🔍 Raw token obtained:",
-      devicePushToken.data.substring(0, 20) + "...",
-      `(${devicePushToken.data.length} chars)`,
+      tokenData.substring(0, 20) + "...",
+      `(${tokenData.length} chars)`,
     );
 
     // Format token for AWS SNS compatibility using comprehensive validation
-    const formatResult = formatTokenForSNS(
-      devicePushToken.data,
-      devicePushToken.type,
-    );
+    const formatResult = formatTokenForSNS(tokenData, tokenType);
 
     if (!formatResult.isValid) {
       console.error("[DEVICE-TOKEN] ❌ Token validation failed");
@@ -242,74 +310,20 @@ export async function getDevicePushToken() {
       formatResult.formattedToken.substring(0, 20) + "...",
       `(${formatResult.formattedToken.length} chars)`,
     );
+    console.log(
+      "[DEVICE-TOKEN] 📱 GENERATED DEVICE TOKEN (full, for debugging):",
+      formatResult.formattedToken,
+    );
 
     return {
       data: formatResult.formattedToken,
-      type: devicePushToken.type, // 'ios' or 'android'
-      originalData: devicePushToken.data, // Keep original for debugging
+      type: tokenType,
+      originalData: tokenData,
       isValid: formatResult.isValid,
       warnings: formatResult.warnings,
     };
   } catch (error) {
     console.error("[DEVICE-TOKEN] ❌ Error getting device push token:", error);
-    return null;
-  }
-}
-
-/**
- * Register device token directly with AWS SNS
- * Creates platform endpoint for direct push notifications
- */
-export async function registerTokenDirectlyWithSNS() {
-  console.log("[AWS SNS DIRECT] 🔧 Starting direct SNS registration...");
-
-  try {
-    const nativeToken = await getDevicePushToken();
-
-    if (!nativeToken || !nativeToken.data) {
-      console.error(
-        "[AWS SNS DIRECT] ❌ No valid native token available for direct SNS registration",
-      );
-      return null;
-    }
-
-    console.log(
-      `[AWS SNS DIRECT] 📱 Registering ${nativeToken.type} token: ${nativeToken.data.substring(0, 20)}...`,
-    );
-    console.log(
-      `[AWS SNS DIRECT] 📊 Token length: ${nativeToken.data.length} characters`,
-    );
-
-    console.log("[AWS SNS DIRECT] 🌐 Calling registerTokenWithSNS...");
-    // Register with AWS SNS directly
-    const endpointArn = await registerTokenWithSNS(nativeToken.data);
-
-    if (endpointArn) {
-      console.log("[AWS SNS DIRECT] ✅ Token registered successfully!");
-      console.log(`[AWS SNS DIRECT] 🎯 Endpoint ARN: ${endpointArn}`);
-
-      return {
-        success: true,
-        endpointArn,
-        deviceToken: nativeToken.data,
-        platform: nativeToken.type,
-        message: "Token registered with AWS SNS",
-      };
-    } else {
-      console.error(
-        "[AWS SNS DIRECT] ❌ Failed to register token - no endpoint ARN returned",
-      );
-      return null;
-    }
-  } catch (error) {
-    console.error(
-      "[AWS SNS DIRECT] ❌ Error in direct SNS registration:",
-      error,
-    );
-    console.error("[AWS SNS DIRECT] 🔍 Error details:", {
-      message: error.message,
-      stack: error.stack,
-    });
     return null;
   }
 }
@@ -352,6 +366,9 @@ export async function registerPushTokenWithBackend(backendUrl?: string) {
       return null;
     }
 
+    // deviceToken = native push token used for backend identification
+    const deviceToken = nativeToken?.data ?? null;
+
     // Validate native token for AWS SNS
     if (nativeToken) {
       const tokenLength = nativeToken.data.length;
@@ -375,8 +392,9 @@ export async function registerPushTokenWithBackend(backendUrl?: string) {
       }
 
       // Check if token contains only valid characters
+      // Android FCM tokens from Expo use format senderId:fcmToken (colon is valid)
       const validPattern =
-        platform === "ios" ? /^[a-fA-F0-9]+$/ : /^[a-zA-Z0-9\+\/\=\_\-]+$/;
+        platform === "ios" ? /^[a-fA-F0-9]+$/ : /^[a-zA-Z0-9\+\/\=\_\-:]+$/;
       if (!validPattern.test(nativeToken.data)) {
         console.warn(
           `[TOKEN] ⚠️ Token contains invalid characters for ${platform}`,
@@ -432,7 +450,7 @@ export async function registerPushTokenWithBackend(backendUrl?: string) {
       pushToken: nativeToken?.data, // Send formatted Native Token (APNs/FCM) for AWS SNS
       expoPushToken: pushToken, // Send Expo token as auxiliary
       platform: nativeToken?.type || Platform.OS, // Use native token type or Platform.OS
-      userId: deviceToken, // Use deviceToken as userId for now
+      userId: deviceToken ?? pushToken ?? null, // Use deviceToken or pushToken as userId
       timestamp: new Date().toISOString(),
       // Add metadata for debugging AWS SNS issues
       tokenLength: nativeToken?.data?.length,
@@ -446,9 +464,16 @@ export async function registerPushTokenWithBackend(backendUrl?: string) {
       expoPushToken: requestPayload.expoPushToken?.substring(0, 20) + "...",
     });
 
+    console.log("[BACKEND-REGISTER] ═══════════════════════════════════════");
+    console.log(`[BACKEND-REGISTER] 🌐 URL: ${url}`);
     console.log(
-      "[BACKEND-REGISTER] 🌐 Sending registration request to backend...",
+      "[BACKEND-REGISTER] 📡 Sending POST (if this hangs or fails, check:)",
     );
+    console.log(
+      "   - Dev: Is backend running? Use 'adb reverse tcp:3000 tcp:3000' for physical device",
+    );
+    console.log("   - Network: Can device reach this URL?");
+    console.log("[BACKEND-REGISTER] ═══════════════════════════════════════");
     // Send to your backend (updated for new API format)
     const response = await fetch(url, {
       method: "POST",
@@ -464,10 +489,8 @@ export async function registerPushTokenWithBackend(backendUrl?: string) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(
-        `[BACKEND-REGISTER] ❌ Backend registration failed: ${response.status} ${response.statusText}`,
-      );
-      console.error("[BACKEND-REGISTER] 📄 Error details:", errorText);
+      const isInvalidRoute =
+        response.status === 404 && errorText.includes("Invalid route");
 
       // Check if it's actually a "token already exists" success case
       if (
@@ -480,9 +503,16 @@ export async function registerPushTokenWithBackend(backendUrl?: string) {
         return { success: true, message: "Token already exists" };
       }
 
-      // For other errors, don't throw - just log and return null
-      console.error(
-        "[BACKEND-REGISTER] ⚠️ Registration failed, continuing with app flow...",
+      // Known backend limitation: route not implemented - log as info, not error
+      if (isInvalidRoute) {
+        console.log(
+          "[BACKEND-REGISTER] ℹ️ register-push-token route not implemented on backend (using SNS/registertoken instead)",
+        );
+        return null;
+      }
+
+      console.warn(
+        `[BACKEND-REGISTER] ⚠️ Backend registration failed: ${response.status} - ${errorText.slice(0, 100)}`,
       );
       return null;
     }
@@ -497,7 +527,7 @@ export async function registerPushTokenWithBackend(backendUrl?: string) {
       );
     }
     return result;
-  } catch (error) {
+  } catch (error: any) {
     console.error(
       "[BACKEND-REGISTER] ❌ ================================================",
     );
@@ -507,14 +537,26 @@ export async function registerPushTokenWithBackend(backendUrl?: string) {
     console.error(
       "[BACKEND-REGISTER] ❌ ================================================",
     );
-    console.error("[BACKEND-REGISTER] ❌ Error details:", error);
-    console.error(`[BACKEND-REGISTER] ❌ Error message: ${error.message}`);
-    console.error(`[BACKEND-REGISTER] ❌ Error stack: ${error.stack}`);
-    console.error("[BACKEND-REGISTER] ❌ This might indicate:");
-    console.error("  - Network connectivity issues");
-    console.error("  - Backend server not running");
-    console.error("  - Incorrect endpoint URL");
-    console.error("  - CORS or authentication issues");
+    console.error(`[BACKEND-REGISTER] ❌ Error type: ${error?.name ?? "unknown"}`);
+    console.error(`[BACKEND-REGISTER] ❌ Message: ${error?.message ?? String(error)}`);
+    if (error?.message === "Network request failed") {
+      console.error(
+        "[BACKEND-REGISTER] ❌ 'Network request failed' = device cannot reach URL",
+      );
+      console.error(
+        "[BACKEND-REGISTER] ❌ Dev+physical device: run 'adb reverse tcp:3000 tcp:3000'",
+      );
+    }
+    if (error?.message === "Network request failed") {
+      console.error(
+        "[BACKEND-REGISTER] ❌ 'Network request failed' = fetch could not connect.",
+      );
+      console.error(
+        "   → Dev + localhost: Physical device cannot reach localhost (use adb reverse tcp:3000 tcp:3000)",
+      );
+      console.error("   → Check: WiFi, DNS, firewall, backend running");
+    }
+    console.error(`[BACKEND-REGISTER] ❌ Stack: ${error?.stack?.slice(0, 300)}`);
     console.error(
       "[BACKEND-REGISTER] ❌ ================================================",
     );
@@ -525,28 +567,28 @@ export async function registerPushTokenWithBackend(backendUrl?: string) {
 
 /**
  * Setup notification listeners
- * Returns cleanup function to remove listeners
+ * Returns Promise<cleanup> - use async/await or .then() for cleanup
  */
-export function setupNotificationListeners(
-  onNotificationReceived?: (notification: Notifications.Notification) => void,
-  onNotificationTapped?: (response: Notifications.NotificationResponse) => void,
-) {
-  // Listener for notifications received while app is in foreground
+export async function setupNotificationListeners(
+  onNotificationReceived?: (notification: any) => void,
+  onNotificationTapped?: (response: any) => void,
+): Promise<() => void> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return () => {};
+
   const notificationListener = Notifications.addNotificationReceivedListener(
-    (notification) => {
+    (notification: any) => {
       console.log("Notification received:", notification);
       onNotificationReceived?.(notification);
     },
   );
 
-  // Listener for when user taps on notification
   const responseListener =
-    Notifications.addNotificationResponseReceivedListener((response) => {
+    Notifications.addNotificationResponseReceivedListener((response: any) => {
       console.log("Notification tapped:", response);
       onNotificationTapped?.(response);
     });
 
-  // Return cleanup function - subscriptions have .remove() method
   return () => {
     notificationListener?.remove();
     responseListener?.remove();
@@ -569,6 +611,8 @@ export interface SNSPushPayload {
  * Schedule a local notification (for testing)
  */
 export async function scheduleLocalNotification(payload: SNSPushPayload) {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   await Notifications.scheduleNotificationAsync({
     content: {
       title: payload.title,
@@ -1143,7 +1187,7 @@ export async function getNotificationHistory() {
 }
 
 /**
- * Check backend health
+ * Check backend health - returns null if health endpoint unavailable
  */
 export async function checkBackendHealth() {
   try {
@@ -1153,27 +1197,32 @@ export async function checkBackendHealth() {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Health check failed: ${response.status} ${errorText}`);
+      console.warn(
+        "[HEALTH] ⚠️ Health endpoint returned",
+        response.status,
+        "- backend may use different path",
+      );
+      return null;
     }
 
     const result = await response.json();
     return result;
   } catch (error) {
-    console.error("[HEALTH] ❌ Backend health check failed:", error);
-    throw error;
+    console.warn("[HEALTH] ⚠️ Backend health check failed:", (error as Error)?.message);
+    return null;
   }
 }
 
 /**
- * Register token with both AWS SNS and backend
- * Provides redundancy and flexibility
+ * Register token with both outix.co/registertoken (SNS) and backend.
+ * Backend has /registertoken, not /register-push-token.
  */
 export async function registerTokenWithBothServices() {
   try {
     console.log("[PUSH SETUP] 🚀 Starting comprehensive token registration...");
 
     const results = {
-      sns: null as any,
+      sns: null as string | null,
       backend: null as any,
       deviceToken: null as string | null,
     };
@@ -1187,17 +1236,22 @@ export async function registerTokenWithBothServices() {
       );
     }
 
-    // Try AWS SNS registration first
-    try {
-      results.sns = await registerTokenDirectlyWithSNS();
-      if (results.sns?.success) {
-        console.log("[PUSH SETUP] ✅ SNS registration successful");
+    // 1. Register with outix.co/apis/registertoken (backend has this endpoint)
+    if (nativeToken?.data) {
+      try {
+        const snsResult = await registerTokenWithSNS(nativeToken.data);
+        results.sns = snsResult;
+        if (snsResult) {
+          console.log(
+            "[PUSH SETUP] ✅ SNS/registertoken registration successful",
+          );
+        }
+      } catch (error) {
+        console.error("[PUSH SETUP] ⚠️ SNS registration failed:", error);
       }
-    } catch (error) {
-      console.error("[PUSH SETUP] ⚠️ SNS registration failed:", error);
     }
 
-    // Try backend registration as fallback/supplement
+    // 2. Also try register-push-token (backend may not have it - returns 404)
     try {
       results.backend = await registerPushTokenWithBackend();
       if (results.backend?.success) {
@@ -1207,22 +1261,45 @@ export async function registerTokenWithBothServices() {
       console.error("[PUSH SETUP] ⚠️ Backend registration failed:", error);
     }
 
-    const hasAnySuccess = results.sns?.success || results.backend?.success;
+    const hasAnySuccess =
+      !!results.sns ||
+      results.backend?.success ||
+      (results.backend && results.backend.error === false);
 
+    console.log("[PUSH SETUP] ═══════════════════════════════════════");
     console.log("[PUSH SETUP] 📊 Registration Summary:");
-    console.log(`  • AWS SNS: ${results.sns?.success ? "✅" : "❌"}`);
-    console.log(`  • Backend: ${results.backend?.success ? "✅" : "❌"}`);
+    console.log(
+      `  • SNS (outix.co/registertoken): ${results.sns ? "✅" : "❌"}`,
+    );
+    console.log(
+      `  • Backend (register-push-token): ${results.backend?.success || results.backend?.error === false ? "✅" : "❌"}`,
+    );
     console.log(`  • Overall: ${hasAnySuccess ? "✅" : "❌"}`);
+
+    if (!hasAnySuccess) {
+      console.log("[PUSH SETUP] ❌ Token NOT registered. Check logs above:");
+      if (!results.sns) {
+        console.log(
+          "  → SNS: Look for [SNS Registration] - fetch failed? HTTP error?",
+        );
+      }
+      if (!results.backend?.success && results.backend?.error !== false) {
+        console.log(
+          "  → Backend: Look for [BACKEND-REGISTER] - 404 is OK (route not implemented)",
+        );
+      }
+    }
+    console.log("[PUSH SETUP] ═══════════════════════════════════════");
 
     return {
       success: hasAnySuccess,
       results,
-      primaryEndpoint: results.sns?.endpointArn || null,
+      primaryEndpoint: results.sns,
       deviceToken: results.deviceToken,
     };
   } catch (error) {
     console.error(
-      "[PUSH SETUP] ❌ Error in comprehensive registration:",
+      "[PUSH SETUP] ❌ Error in registration:",
       error,
     );
     return {
@@ -1299,6 +1376,11 @@ export async function debugPushTokenSetup() {
     console.log(`   - Is Physical Device: ${Device.isDevice}`);
     console.log(`   - Platform: ${Platform.OS}`);
 
+    const Notifications = await getNotifications();
+    if (!Notifications) {
+      console.log("❌ expo-notifications not available (Expo Go on Android?)");
+      return;
+    }
     const { status } = await Notifications.getPermissionsAsync();
     console.log(`   - Permission Status: ${status}`);
 
@@ -1345,18 +1427,8 @@ export async function debugPushTokenSetup() {
       );
     }
 
-    // 4. Test token registration
+    // 4. Test token registration (backend manages SNS)
     console.log("\n4. Token Registration Test:");
-
-    // Test AWS SNS registration
-    console.log("   - Testing AWS SNS registration:");
-    const snsResult = await registerTokenDirectlyWithSNS();
-    if (snsResult?.success) {
-      console.log("     ✅ SNS registration successful");
-      console.log(`     ✅ Endpoint ARN: ${snsResult.endpointArn}`);
-    } else {
-      console.log("     ❌ SNS registration failed");
-    }
 
     // Test backend registration
     console.log("   - Testing backend registration:");

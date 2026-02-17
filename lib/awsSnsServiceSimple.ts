@@ -10,6 +10,8 @@ import { Platform } from "react-native";
 // Store registered endpoint ARNs locally
 const registeredEndpoints = new Map<string, string>();
 
+const SNS_REGISTER_URL = "https://outix.co/apis/registertoken";
+
 /**
  * Register device token with backend server that handles AWS SNS
  * Uses the native iOS APNs token (64-char hex) as the device identifier
@@ -17,9 +19,17 @@ const registeredEndpoints = new Map<string, string>();
 export async function registerTokenWithSNS(
   deviceToken: string,
 ): Promise<string | null> {
+  const url = SNS_REGISTER_URL + "/" + encodeURIComponent(deviceToken);
+  const requestBody = {
+    deviceToken: deviceToken,
+    platform: Platform.OS,
+    timestamp: new Date().toISOString(),
+  };
+
   try {
+    console.log("[SNS Registration] ═══════════════════════════════════════");
     console.log(
-      `[SNS Registration] 🔧 Registering APNs device token: ${deviceToken.substring(0, 20)}...`,
+      `[SNS Registration] 🔧 Registering ${Platform.OS} token: ${deviceToken.substring(0, 25)}...`,
     );
     console.log(
       `[SNS Registration] 📊 Token length: ${deviceToken.length} characters`,
@@ -28,59 +38,108 @@ export async function registerTokenWithSNS(
     // Check if we already have this endpoint cached
     if (registeredEndpoints.has(deviceToken)) {
       const cachedArn = registeredEndpoints.get(deviceToken);
-      console.log(`[SNS Registration] ✅ Using cached endpoint: ${cachedArn}`);
+      console.log(
+        `[SNS Registration] ✅ Using cached endpoint: ${cachedArn?.substring(0, 50)}...`,
+      );
       return cachedArn!;
     }
 
-    // Call your backend server that handles AWS SNS endpoint creation
-    // Uses native iOS APNs token as device identifier
-    const response = await fetch(
-      "https://outix.co/apis/registertoken/" + deviceToken,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          devicetoken: deviceToken,
-        },
-        body: JSON.stringify({
-          deviceToken: deviceToken,
-          platform: Platform.OS,
-          timestamp: new Date().toISOString(),
-        }),
+    console.log(`[SNS Registration] 🌐 URL: ${url.substring(0, 80)}...`);
+    console.log(
+      `[SNS Registration] 📤 Request body: ${JSON.stringify(requestBody).slice(0, 120)}...`,
+    );
+    console.log("[SNS Registration] 📡 Sending fetch request...");
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        devicetoken: deviceToken,
       },
+      body: JSON.stringify(requestBody),
+    });
+
+    const responseText = await response.text();
+    console.log(
+      `[SNS Registration] 📥 Response: status=${response.status} ${response.statusText}, body length=${responseText.length}`,
     );
 
+    // Backend returns 404 with "Token may already exist" - treat as success
+    if (response.status === 404 && responseText.includes("already exist")) {
+      console.log(
+        "[SNS Registration] ✅ Token already registered (404 with 'already exist' - treating as success)",
+      );
+      return "registered";
+    }
+
     if (!response.ok) {
-      const errorText = await response.text();
       console.error(
-        `[SNS Registration] ❌ Backend error:`,
-        response.status,
-        errorText,
+        `[SNS Registration] ❌ HTTP ${response.status} - Backend error:`,
+      );
+      console.error(`[SNS Registration] ❌ Response body: ${responseText}`);
+      return null;
+    }
+
+    let result: any;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error(
+        `[SNS Registration] ❌ Failed to parse JSON response:`,
+        parseError,
+      );
+      console.error(
+        `[SNS Registration] ❌ Raw response (first 300 chars): ${responseText.slice(0, 300)}`,
       );
       return null;
     }
 
-    const result = await response.json();
+    console.log(
+      `[SNS Registration] 📋 Parsed response keys: ${Object.keys(result).join(", ")}`,
+    );
+    console.log(
+      `[SNS Registration] 📋 Response: ${JSON.stringify(result).slice(0, 200)}`,
+    );
 
     if (result.endpointArn) {
       const endpointArn = result.endpointArn;
       console.log(
-        `[SNS Registration] ✅ Backend created endpoint: ${endpointArn}`,
+        `[SNS Registration] ✅ Backend created endpoint: ${endpointArn.substring(0, 60)}...`,
       );
-
-      // Cache the endpoint ARN
       registeredEndpoints.set(deviceToken, endpointArn);
-
       return endpointArn;
-    } else if (result.success) {
-      console.log(`[SNS Registration] ✅ Token registered successfully`);
-      return "registered"; // Backend handled it, no specific ARN returned
-    } else {
-      console.error(`[SNS Registration] ❌ No endpoint ARN in response`);
-      return null;
     }
+    // Backend may return various success formats (e.g. {error: false, status: 200, msg: "..."})
+    if (
+      result.success === true ||
+      (result.error === false && response.ok) ||
+      (result.status === 200 && result.error !== true)
+    ) {
+      console.log(
+        `[SNS Registration] ✅ Token registered successfully`,
+        result.msg ? `(${result.msg})` : "",
+      );
+      return "registered";
+    }
+    console.error(
+      `[SNS Registration] ❌ Unexpected response format - expected endpointArn, success, or error:false`,
+    );
+    console.error(
+      `[SNS Registration] ❌ Full response: ${JSON.stringify(result)}`,
+    );
+    return null;
   } catch (error: any) {
-    console.error(`[SNS Registration] ❌ Registration failed:`, error);
+    console.error("[SNS Registration] ❌ ═══════════════════════════════════");
+    console.error("[SNS Registration] ❌ FETCH FAILED (network/connection)");
+    console.error(`[SNS Registration] ❌ Error type: ${error?.name ?? "unknown"}`);
+    console.error(`[SNS Registration] ❌ Message: ${error?.message ?? String(error)}`);
+    if (error?.cause) {
+      console.error(`[SNS Registration] ❌ Cause:`, error.cause);
+    }
+    console.error(
+      "[SNS Registration] ❌ Possible reasons: no network, DNS failure, SSL error, timeout, or server unreachable",
+    );
+    console.error("[SNS Registration] ❌ ═══════════════════════════════════");
     return null;
   }
 }

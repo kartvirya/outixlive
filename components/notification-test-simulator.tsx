@@ -1,5 +1,4 @@
 import { getAlertDetails } from "@/lib/api";
-import * as Notifications from "expo-notifications";
 import React, { useState } from "react";
 import {
     ScrollView,
@@ -187,6 +186,7 @@ export function NotificationTestSimulator({
           "Test message";
       }
 
+      const Notifications = await import("expo-notifications");
       await Notifications.scheduleNotificationAsync({
         content: {
           title: notificationType,
@@ -222,7 +222,7 @@ export function NotificationTestSimulator({
     addResult("This simulates getLastNotificationResponseAsync()");
 
     try {
-      // Check if there's a last notification response
+      const Notifications = await import("expo-notifications");
       const lastResponse =
         await Notifications.getLastNotificationResponseAsync();
       if (lastResponse) {

@@ -461,7 +461,8 @@ export const registerToken = async (deviceToken: string) => {
     // Add devicetoken header (lowercase - server expectation)
     headers["devicetoken"] = deviceToken;
 
-    const url = `${BASE_URL}/registertoken/${deviceToken}`;
+    // FCM tokens contain colons - must encode for URL path
+    const url = `${BASE_URL}/registertoken/${encodeURIComponent(deviceToken)}`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -506,8 +507,16 @@ export const registerToken = async (deviceToken: string) => {
       return responseData;
     }
     return parseApiResponse(response);
-  } catch (error) {
+  } catch (error: any) {
     console.error("[TOKEN] ❌ Error registering token:", error);
+    console.error(
+      `[TOKEN] ❌ Error: ${error?.name ?? "unknown"} - ${error?.message ?? String(error)}`,
+    );
+    if (error?.message === "Network request failed") {
+      console.error(
+        "[TOKEN] ❌ Device cannot reach server. Dev+physical: use adb reverse or production URL",
+      );
+    }
     throw error;
   }
 };

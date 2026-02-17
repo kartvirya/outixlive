@@ -39,12 +39,12 @@ export function validateAndFormatSNSToken(token: string, platform: 'ios' | 'andr
 
   let formattedToken = token;
 
-  // Remove common invalid characters
+  // Remove whitespace only (colons and dashes are valid in FCM tokens)
   const originalToken = formattedToken;
-  formattedToken = formattedToken.replace(/[\s\-\:]/g, ''); // Remove spaces, dashes, colons
+  formattedToken = formattedToken.replace(/\s/g, '');
 
   if (formattedToken.length !== originalToken.length) {
-    result.warnings.push(`Removed ${originalToken.length - formattedToken.length} invalid characters (spaces, dashes, colons)`);
+    result.warnings.push(`Removed ${originalToken.length - formattedToken.length} whitespace characters`);
   }
 
   // Platform-specific validation and formatting
@@ -67,11 +67,11 @@ export function validateAndFormatSNSToken(token: string, platform: 'ios' | 'andr
     }
 
   } else if (platform === 'android') {
-    // Android FCM tokens are typically base64-like
-    const validChars = /^[a-zA-Z0-9\+\/\=\_\-]+$/;
+    // Android FCM tokens are base64-like and can include colons (e.g. prefix:payload)
+    const validChars = /^[a-zA-Z0-9\+\/\=\_\-:]+$/;
     
     if (!validChars.test(formattedToken)) {
-      const cleanToken = formattedToken.replace(/[^a-zA-Z0-9\+\/\=\_\-]/g, '');
+      const cleanToken = formattedToken.replace(/[^a-zA-Z0-9\+\/\=\_\-:]/g, '');
       result.warnings.push(`Removed ${formattedToken.length - cleanToken.length} invalid characters for Android FCM token`);
       formattedToken = cleanToken;
     }

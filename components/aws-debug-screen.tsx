@@ -1,8 +1,7 @@
 import {
     getDevicePushToken,
-    registerTokenDirectlyWithSNS,
+    registerPushTokenWithBackend,
 } from "@/lib/pushNotifications";
-import * as Notifications from "expo-notifications";
 import React, { useState } from "react";
 import {
     Alert,
@@ -28,6 +27,7 @@ export default function AWSDebugScreen() {
     addLog("🚀 Starting AWS notification debug...");
 
     try {
+      const Notifications = await import("expo-notifications");
       // 1. Check permissions
       const { status } = await Notifications.getPermissionsAsync();
       addLog(`📋 Permission status: ${status}`);
@@ -51,42 +51,14 @@ export default function AWSDebugScreen() {
         return;
       }
 
-      // 3. Test AWS registration
-      addLog("☁️ Testing AWS SNS registration...");
-      const awsResult = await registerTokenDirectlyWithSNS();
-      if (awsResult?.success) {
-        addLog(`✅ AWS registration successful`);
-        addLog(`🎯 Endpoint ARN: ${awsResult.endpointArn}`);
-      } else {
-        addLog(
-          `❌ AWS registration failed: ${awsResult?.error || "Unknown error"}`,
-        );
-      }
-
-      // 4. Test backend registration
+      // 3. Test backend registration (backend manages SNS)
       addLog("🏢 Testing backend registration...");
       try {
-        const response = await fetch(
-          `https://outix.co/apis/registertoken/${tokenResult.data}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              devicetoken: tokenResult.data,
-            },
-            body: JSON.stringify({
-              deviceToken: tokenResult.data,
-              platform: "ios",
-              timestamp: new Date().toISOString(),
-            }),
-          },
-        );
-
-        if (response.ok) {
-          const result = await response.json();
-          addLog(`✅ Backend registration: ${result.msg}`);
+        const backendResult = await registerPushTokenWithBackend();
+        if (backendResult?.success || (backendResult && backendResult.error === false)) {
+          addLog(`✅ Backend registration successful`);
         } else {
-          addLog(`❌ Backend registration failed: ${response.status}`);
+          addLog(`❌ Backend registration failed`);
         }
       } catch (backendError) {
         addLog(

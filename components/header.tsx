@@ -1,4 +1,3 @@
-import { MotiView } from "moti";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { AdminControls } from "./admin-controls";
@@ -19,19 +18,14 @@ export const Header = ({
       <View style={styles.overlay} />
 
       <View style={styles.container}>
-        {/* Left */}
-        <MotiView
-          from={{ opacity: 0, translateY: -8 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "timing", duration: 300 }}
-          style={styles.brand}
-        >
+        {/* Left - Using View instead of MotiView to avoid tslib/Expo Go compatibility issues */}
+        <View style={styles.brand}>
           <View>
             <Text style={styles.title}>
               Outix <Text style={styles.live}>LIVE</Text>
             </Text>
           </View>
-        </MotiView>
+        </View>
 
         {/* Right */}
         <AdminControls

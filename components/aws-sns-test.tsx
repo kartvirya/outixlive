@@ -9,7 +9,7 @@ import { getDeviceToken } from "@/lib/deviceToken";
 import {
     debugPushTokenSetup,
     getDevicePushToken,
-    registerTokenDirectlyWithSNS,
+    registerPushTokenWithBackend,
     sendPushViaSNS,
 } from "@/lib/pushNotifications";
 import React, { useState } from "react";
@@ -72,7 +72,7 @@ export default function AWSSNSTestScreen() {
     }
   };
 
-  const registerWithSNS = async () => {
+  const registerWithBackend = async () => {
     if (!deviceToken) {
       Alert.alert("No Token", "Please get device token first");
       return;
@@ -80,17 +80,15 @@ export default function AWSSNSTestScreen() {
 
     setIsLoading(true);
     try {
-      addLog("🔧 Registering token with AWS SNS...");
+      addLog("🔧 Registering token with backend (backend manages SNS)...");
 
-      const result = await registerTokenDirectlyWithSNS();
+      const result = await registerPushTokenWithBackend();
 
-      if (result?.success) {
-        setEndpointArn(result.endpointArn);
-        addLog(`✅ Registration successful!`);
-        addLog(`🎯 Endpoint ARN: ${result.endpointArn}`);
-        addLog(`📱 Platform: ${result.platform}`);
+      if (result?.success || (result && result.error === false)) {
+        setEndpointArn("registered"); // Backend manages endpoint
+        addLog(`✅ Backend registration successful`);
       } else {
-        addLog("❌ Registration failed");
+        addLog("❌ Backend registration failed");
       }
     } catch (error: any) {
       addLog(`❌ Registration error: ${error.message}`);
@@ -180,10 +178,10 @@ export default function AWSSNSTestScreen() {
 
         <TouchableOpacity
           style={[styles.button, styles.secondaryButton]}
-          onPress={registerWithSNS}
+          onPress={registerWithBackend}
           disabled={isLoading || !deviceToken}
         >
-          <Text style={styles.buttonText}>2. Register with AWS SNS</Text>
+          <Text style={styles.buttonText}>2. Register with Backend</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

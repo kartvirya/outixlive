@@ -21,6 +21,10 @@ export default {
     },
 
     android: {
+      package: "com.live.outix",
+      useNextNotificationsApi: true,
+      // Required for Firebase/FCM. Download from Firebase Console → Project Settings → Your apps → Android
+      googleServicesFile: "./google-services.json",
       adaptiveIcon: {
         backgroundColor: "#000000",
         foregroundImage: "./assets/images/android-icon-foreground.png",
@@ -38,7 +42,20 @@ export default {
     },
 
     plugins: [
+      "@react-native-firebase/app",
       "expo-router",
+      "./plugins/withNotifeeAndroidFix",
+      [
+        "expo-build-properties",
+        {
+          android: {
+            extraMavenRepos: [
+              "$rootDir/../node_modules/@notifee/react-native/android/libs",
+            ],
+          },
+        },
+      ],
+      "./plugins/withFirebaseManifestFix",
       [
         "expo-splash-screen",
         {
@@ -71,10 +88,7 @@ export default {
       eas: {
         projectId: "266177d4-b4cf-4862-a6da-6a92a3f92244",
       },
-      baseUrl:
-        process.env.EXPO_PUBLIC_BASE_URL ||
-        process.env.BASE_URL ||
-        "https://outix.co/apis",
+      baseUrl: "https://outix.co/apis",
       // AWS SNS Configuration
       aws: {
         region: "eu-north-1",

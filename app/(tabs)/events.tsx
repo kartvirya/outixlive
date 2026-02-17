@@ -21,7 +21,6 @@ import {
   Navigation,
   Search,
 } from "lucide-react-native";
-import { MotiView } from "moti";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -253,15 +252,9 @@ export default function EventsScreen() {
             )}
           </AnimatedPressable>
 
-          {/* Expandable Content */}
+          {/* Expandable Content - Using View instead of MotiView for Expo Go compatibility */}
           {isHeaderExpanded && (
-            <MotiView
-              from={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ type: "timing", duration: 300 }}
-              style={styles.expandableContent}
-            >
+            <View style={styles.expandableContent}>
               <View style={styles.hero}>
                 <Text style={styles.heroSubtitle}>
                   Browse events from your venues
@@ -308,7 +301,7 @@ export default function EventsScreen() {
                   placeholder="Search events..."
                 />
               </View>
-            </MotiView>
+            </View>
           )}
         </View>
 

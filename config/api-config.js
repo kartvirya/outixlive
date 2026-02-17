@@ -6,14 +6,16 @@
 // Environment configuration
 const ENV = "development"; // Change to 'production' when ready to deploy
 
+const API_BASE_URL = "https://outix.co/apis";
+
 const config = {
   development: {
-    API_BASE_URL: "http://localhost:3000/api",
+    API_BASE_URL,
     ENVIRONMENT: "development",
     DEBUG: true,
   },
   production: {
-    API_BASE_URL: "https://your-production-api.com/api", // Replace with real production URL
+    API_BASE_URL,
     ENVIRONMENT: "production",
     DEBUG: false,
   },

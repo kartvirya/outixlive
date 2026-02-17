@@ -1,5 +1,3 @@
-import Constants from "expo-constants";
-
 /**
  * Environment configuration for push notifications
  * Switch between local development and production endpoints
@@ -10,52 +8,31 @@ const ENV =
     ? "development"
     : "production";
 
+const API_BASE_URL = "https://outix.co/apis";
+
 const environments = {
   development: {
-    BASE_URL: "http://localhost:3000/api",
-    PUSH_API_BASE_URL: "http://localhost:3000/api",
+    BASE_URL: API_BASE_URL,
+    PUSH_API_BASE_URL: API_BASE_URL,
     DEBUG: true,
   },
   production: {
-    BASE_URL: "https://outix.co/apis",
-    PUSH_API_BASE_URL: "https://outix.co/apis", // Replace with your production push API
+    BASE_URL: API_BASE_URL,
+    PUSH_API_BASE_URL: API_BASE_URL,
     DEBUG: false,
   },
 };
 
 /**
- * Get Base URL from environment variables with fallback to environment config
- * Priority:
- * 1. EXPO_PUBLIC_BASE_URL from app.config.js extra
- * 2. EXPO_PUBLIC_BASE_URL from process.env
- * 3. BASE_URL from process.env
- * 4. Environment-based config
+ * Always use outix.co/apis - no env overrides
  */
 const getBaseUrl = (): string => {
-  // Try to get from expo constants first (set in app.config.js)
-  const baseUrl = Constants.expoConfig?.extra?.baseUrl;
-
-  if (baseUrl && typeof baseUrl === "string") {
-    return baseUrl;
-  }
-
-  // Fallback to process.env (works in some setups)
-  if (typeof process !== "undefined") {
-    if (process.env?.EXPO_PUBLIC_BASE_URL) {
-      return process.env.EXPO_PUBLIC_BASE_URL;
-    }
-    if (process.env?.BASE_URL) {
-      return process.env.BASE_URL;
-    }
-  }
-
-  // Use environment-based configuration
-  return environments[ENV].BASE_URL;
+  return API_BASE_URL;
 };
 
-// Get push API URL (for new local backend)
+// Get push API URL - use same as BASE_URL so physical device in dev uses production
 const getPushApiUrl = (): string => {
-  return environments[ENV].PUSH_API_BASE_URL;
+  return getBaseUrl();
 };
 
 export const BASE_URL = getBaseUrl();
@@ -72,5 +49,5 @@ export const PUSH_ENDPOINTS = {
   TEST_NOTIFICATION: `${PUSH_API_BASE_URL}/test-notification`,
   GET_DEVICES: `${PUSH_API_BASE_URL}/devices`,
   GET_HISTORY: `${PUSH_API_BASE_URL}/notifications/history`,
-  HEALTH_CHECK: `${PUSH_API_BASE_URL}/../health`,
+  HEALTH_CHECK: `${getBaseUrl().replace(/\/$/, "")}/health`,
 };
