@@ -83,6 +83,7 @@ import {
     Image,
     Linking,
     Modal,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -90,6 +91,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { FullScreenImageModal } from "@/components/full-screen-image-modal";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 interface ExtendedEvent extends Event {
@@ -156,6 +158,9 @@ export default function EventDetailScreen() {
   const [showAdminActionMenu, setShowAdminActionMenu] = useState(false);
   const [showAllAlerts, setShowAllAlerts] = useState(false);
   const [expandedEventAlertId, setExpandedEventAlertId] = useState<
+    string | null
+  >(null);
+  const [fullScreenAlertImageUri, setFullScreenAlertImageUri] = useState<
     string | null
   >(null);
 
@@ -988,7 +993,13 @@ export default function EventDetailScreen() {
             />
             <View style={styles.sectionCardContent}>
               {eventAlerts.length > 0 ? (
-                eventAlerts
+                <>
+                  <FullScreenImageModal
+                    visible={!!fullScreenAlertImageUri}
+                    imageUri={fullScreenAlertImageUri}
+                    onClose={() => setFullScreenAlertImageUri(null)}
+                  />
+                  {eventAlerts
                   .sort((a: any, b: any) => {
                     // Sort by PushedDate (most recent first)
                     const dateA = new Date(a.PushedDate || 0).getTime();
@@ -1077,10 +1088,16 @@ export default function EventDetailScreen() {
                           </Text>
                           {hasImage && isExpanded && (
                             <View style={styles.recentAlertImageWrap}>
-                              <Image
-                                source={{ uri: alertImageUrl }}
-                                style={styles.recentAlertImage}
-                              />
+                              <Pressable
+                                onPress={() =>
+                                  setFullScreenAlertImageUri(alertImageUrl)
+                                }
+                              >
+                                <Image
+                                  source={{ uri: alertImageUrl }}
+                                  style={styles.recentAlertImage}
+                                />
+                              </Pressable>
                             </View>
                           )}
                         </View>
@@ -1110,7 +1127,8 @@ export default function EventDetailScreen() {
                         )}
                       </View>
                     );
-                  })
+                  })}
+                </>
               ) : (
                 <View style={styles.sectionCardEmpty}>
                   <Megaphone size={32} color="#737373" />

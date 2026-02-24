@@ -41,6 +41,7 @@ import {
     Image,
     Linking,
     Modal,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -48,6 +49,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { FullScreenImageModal } from "@/components/full-screen-image-modal";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PromoterDetailScreen() {
@@ -78,6 +80,9 @@ export default function PromoterDetailScreen() {
   const [showAllPromoterAlerts, setShowAllPromoterAlerts] = useState(false);
   const [showAdminActionMenu, setShowAdminActionMenu] = useState(false);
   const [expandedPromoterAlertId, setExpandedPromoterAlertId] = useState<
+    string | null
+  >(null);
+  const [fullScreenAlertImageUri, setFullScreenAlertImageUri] = useState<
     string | null
   >(null);
 
@@ -658,7 +663,13 @@ export default function PromoterDetailScreen() {
             />
             <View style={styles.sectionCardContent}>
               {promoterAlerts.length > 0 ? (
-                promoterAlerts
+                <>
+                  <FullScreenImageModal
+                    visible={!!fullScreenAlertImageUri}
+                    imageUri={fullScreenAlertImageUri}
+                    onClose={() => setFullScreenAlertImageUri(null)}
+                  />
+                  {promoterAlerts
                   .sort((a: any, b: any) => {
                     // Sort by PushedDate (most recent first)
                     const dateA = new Date(a.PushedDate || 0).getTime();
@@ -749,10 +760,16 @@ export default function PromoterDetailScreen() {
                           </Text>
                           {hasImage && isExpanded && (
                             <View style={styles.recentAlertImageWrap}>
-                              <Image
-                                source={{ uri: alertImageUrl }}
-                                style={styles.recentAlertImage}
-                              />
+                              <Pressable
+                                onPress={() =>
+                                  setFullScreenAlertImageUri(alertImageUrl)
+                                }
+                              >
+                                <Image
+                                  source={{ uri: alertImageUrl }}
+                                  style={styles.recentAlertImage}
+                                />
+                              </Pressable>
                             </View>
                           )}
                         </View>
@@ -784,7 +801,8 @@ export default function PromoterDetailScreen() {
                         )}
                       </View>
                     );
-                  })
+                  })}
+                </>
               ) : (
                 <View style={styles.sectionCardEmpty}>
                   <Megaphone size={32} color="#737373" />
