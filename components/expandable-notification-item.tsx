@@ -13,7 +13,15 @@ import {
     Wrench,
 } from "lucide-react-native";
 import React, { useState } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { FullScreenImageModal } from "./full-screen-image-modal";
 
 export type NotificationType =
   | "event"
@@ -148,6 +156,7 @@ export const ExpandableNotificationItem = ({
   onLongPress,
 }: ExpandableNotificationItemProps) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [fullScreenImageUri, setFullScreenImageUri] = useState<string | null>(null);
   const config = getTypeConfig(type, serviceStatus);
   const Icon =
     type === "service_request" ? getServiceIcon(serviceType) : config.icon;
@@ -207,9 +216,20 @@ export const ExpandableNotificationItem = ({
 
           {isOpen && imageUrl && (
             <View style={styles.imageWrapper}>
-              <Image source={{ uri: imageUrl }} style={styles.alertImage} />
+              <Pressable
+                onPress={() => setFullScreenImageUri(imageUrl)}
+                style={styles.imagePressable}
+              >
+                <Image source={{ uri: imageUrl }} style={styles.alertImage} />
+                <Text style={styles.tapToExpandHint}>Tap to view full size</Text>
+              </Pressable>
             </View>
           )}
+          <FullScreenImageModal
+            visible={!!fullScreenImageUri}
+            imageUri={fullScreenImageUri}
+            onClose={() => setFullScreenImageUri(null)}
+          />
 
           {isOpen && (type === "service_request" || details) && (
             <View style={styles.expandedContent}>
@@ -430,9 +450,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.08)",
   },
+  imagePressable: {
+    width: "100%",
+  },
   alertImage: {
     width: "100%",
     height: 180,
     backgroundColor: "#0b0f19",
+  },
+  tapToExpandHint: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#737373",
+    textAlign: "center",
   },
 });

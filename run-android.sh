@@ -1,6 +1,17 @@
 #!/bin/bash
 # Run Expo Android build with correct SDK path
 export ANDROID_HOME=/home/bikash/Android
+
+# Check inotify limit (fixes ENOSPC: System limit for number of file watchers reached)
+if [ -f /proc/sys/fs/inotify/max_user_watches ]; then
+  WATCHES=$(cat /proc/sys/fs/inotify/max_user_watches)
+  if [ "$WATCHES" -lt 524288 ] 2>/dev/null; then
+    echo "⚠️  File watcher limit is low ($WATCHES). Metro may fail with ENOSPC."
+    echo "   Run once (requires password): sudo sysctl fs.inotify.max_user_watches=524288"
+    echo "   To make permanent: echo 'fs.inotify.max_user_watches=524288' | sudo tee -a /etc/sysctl.conf && sudo sysctl -p"
+    echo ""
+  fi
+fi
 export NODE_ENV=development
 export BASE_URL=https://outix.co/apis
 export EXPO_PUBLIC_BASE_URL=https://outix.co/apis

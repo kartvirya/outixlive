@@ -1,0 +1,34 @@
+# Same as .gitignore but force-include google-services.json for EAS builds (local + cloud)
+# See https://docs.expo.dev/build-reference/easignore/
+
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+*.pem
+.env
+.env*.local
+.env.backend
+google-services.json
+GoogleService-Info.plist
+*-firebase-adminsdk-*.json
+*.tsbuildinfo
+app-example
+/ios
+/android
+
+# Include google-services.json for build (required for Firebase/Android)
+!google-services.json

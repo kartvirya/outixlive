@@ -588,7 +588,14 @@ export default function PromoterDetailScreen() {
             <View style={styles.eventsSection}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Upcoming Events</Text>
-                <TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(tabs)/events",
+                      params: id ? { promoterId: id } : undefined,
+                    })
+                  }
+                >
                   <Text style={[styles.seeAllText, { color: getThemeColor() }]}>
                     See all {">"}
                   </Text>

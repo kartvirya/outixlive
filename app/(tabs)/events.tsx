@@ -12,7 +12,7 @@ import {
   isValidLatLng,
   type LatLng,
 } from "@/lib/utils";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   Bell,
   ChevronDown,
@@ -35,6 +35,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function EventsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ promoterId?: string }>();
+  const promoterIdParam = typeof params.promoterId === "string" ? params.promoterId : undefined;
   const { canAccessEvent } = useAdmin();
   const [searchQuery, setSearchQuery] = useState("");
   const [hasLocation, setHasLocation] = useState(false);
@@ -160,12 +162,15 @@ export default function EventsScreen() {
     loadEvents(true);
   };
 
-  // Filter events by search query
-  const filteredEvents = eventsList.filter(
-    (e) =>
+  // Filter events by search query and optional venue (promoterId from "See all" on venue page)
+  const filteredEvents = eventsList.filter((e) => {
+    const matchesSearch =
       e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      e.location.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+      e.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (e.promoterName?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
+    const matchesVenue = !promoterIdParam || e.promoterId === promoterIdParam;
+    return matchesSearch && matchesVenue;
+  });
 
   const totalCount = filteredEvents.length;
   const subscribedCount = filteredEvents.filter((e) => e.isSubscribed).length;

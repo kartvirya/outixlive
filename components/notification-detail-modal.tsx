@@ -1,14 +1,16 @@
 import { getAlertDetails, getMyAlerts, markAlertAsRead } from "@/lib/api";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
+  ActivityIndicator,
   Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { FullScreenImageModal } from "./full-screen-image-modal";
 import { ModalComponent } from "./ui/modal";
 
 interface NotificationData {
@@ -41,6 +43,7 @@ export const NotificationDetailModal = ({
   const [error, setError] = useState<string | null>(null);
   const [notificationData, setNotificationData] =
     useState<NotificationData | null>(null);
+  const [fullScreenImageUri, setFullScreenImageUri] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible && notificationId) {
@@ -262,18 +265,35 @@ export const NotificationDetailModal = ({
               notificationData.image_url) && (
               <View style={styles.section}>
                 <Text style={styles.label}>Image</Text>
-                <Image
-                  source={{
-                    uri:
+                <Pressable
+                  onPress={() =>
+                    setFullScreenImageUri(
                       notificationData.image ||
-                      notificationData.notification_image ||
-                      notificationData.image_url ||
-                      "",
-                  }}
-                  style={styles.alertImage}
-                />
+                        notificationData.notification_image ||
+                        notificationData.image_url ||
+                        null,
+                    )
+                  }
+                >
+                  <Image
+                    source={{
+                      uri:
+                        notificationData.image ||
+                        notificationData.notification_image ||
+                        notificationData.image_url ||
+                        "",
+                    }}
+                    style={styles.alertImage}
+                  />
+                  <Text style={styles.tapToExpandHint}>Tap to view full size</Text>
+                </Pressable>
               </View>
             )}
+            <FullScreenImageModal
+              visible={!!fullScreenImageUri}
+              imageUri={fullScreenImageUri}
+              onClose={() => setFullScreenImageUri(null)}
+            />
 
             {/* Alert Info */}
             {notificationData.alertinfo && (
@@ -377,6 +397,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1f2937",
     backgroundColor: "#0b0f19",
+  },
+  tapToExpandHint: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#737373",
+    textAlign: "center",
   },
   date: {
     color: "#d1d5db",

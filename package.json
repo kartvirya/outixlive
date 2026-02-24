@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "eas-build-pre-install": "node ./scripts/eas-write-google-services.js",
+    "eas-build-post-install": "node ./scripts/eas-write-android-sdk.js",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",

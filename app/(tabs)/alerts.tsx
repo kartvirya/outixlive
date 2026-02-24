@@ -12,6 +12,7 @@ import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Pressable,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -210,6 +211,23 @@ export default function AlertsScreen() {
               <ActivityIndicator size="large" color="#22c55e" />
               <Text style={styles.emptyTitle}>Loading alerts...</Text>
             </View>
+          ) : error ? (
+            <View style={styles.emptyState}>
+              <Bell size={40} color="#ef4444" />
+              <Text style={[styles.emptyTitle, styles.errorTitle]}>
+                Could not load alerts
+              </Text>
+              <Text style={styles.emptySubtitle}>{error}</Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  pressed && styles.retryButtonPressed,
+                ]}
+                onPress={() => loadAlerts()}
+              >
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </Pressable>
+            </View>
           ) : notificationsList.length > 0 || activeBuybackOffers.length > 0 ? (
             <>
               {activeBuybackOffers.map((offer) => (
@@ -289,6 +307,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#737373",
     marginTop: 4,
+  },
+  errorTitle: {
+    color: "#f87171",
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: "#22c55e",
+    borderRadius: 8,
+  },
+  retryButtonPressed: {
+    opacity: 0.8,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
   badge: {
     marginTop: 8,

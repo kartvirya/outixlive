@@ -45,6 +45,8 @@ export default {
       "@react-native-firebase/app",
       "expo-router",
       "./plugins/withNotifeeAndroidFix",
+      "./plugins/withGradleNetworkTimeout",
+      "./plugins/withReleaseSigning",
       [
         "expo-build-properties",
         {

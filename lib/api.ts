@@ -450,9 +450,6 @@ export const registerToken = async (deviceToken: string) => {
     const authToken = await getAuthToken();
     const BASE_URL = (await import("@/constants/config")).BASE_URL;
 
-    const formdata = new FormData();
-    // Some APIs require formdata even if empty
-
     const headers: Record<string, string> = {};
     if (authToken) {
       headers["Authorization"] = `Bearer ${authToken}`;
@@ -460,14 +457,16 @@ export const registerToken = async (deviceToken: string) => {
 
     // Add devicetoken header (lowercase - server expectation)
     headers["devicetoken"] = deviceToken;
+    headers["Content-Type"] = "application/json";
 
     // FCM tokens contain colons - must encode for URL path
     const url = `${BASE_URL}/registertoken/${encodeURIComponent(deviceToken)}`;
 
+    // Use JSON body (FormData can cause "Network request failed" on Android)
     const response = await fetch(url, {
       method: "POST",
       headers,
-      body: formdata,
+      body: JSON.stringify({ deviceToken }),
       redirect: "follow",
     });
 
@@ -838,21 +837,20 @@ export const getPromoterAlerts = async (id: string) => {
     const sessionCookie = await getSessionCookie();
 
     const myHeaders = new Headers();
-    // Send DeviceToken in header
+    myHeaders.append("Content-Type", "application/json");
     if (deviceToken) {
       myHeaders.append("DeviceToken", deviceToken);
+      myHeaders.append("devicetoken", deviceToken);
     }
-    // Send Cookie in header
     if (sessionCookie) {
       myHeaders.append("Cookie", sessionCookie);
     }
 
-    const formdata = new FormData();
-
+    // Use JSON body (FormData causes "Network request failed" on Android)
     const requestOptions: RequestInit = {
       method: "POST",
       headers: myHeaders,
-      body: formdata,
+      body: JSON.stringify({}),
       redirect: "follow",
     };
 
@@ -870,10 +868,14 @@ export const getPromoterAlerts = async (id: string) => {
 
     const parsed = await parseApiResponse(response);
     return mapAlertListResponse(parsed);
-  } catch (error) {
-    if (error instanceof TypeError && error.message === "Failed to fetch") {
+  } catch (error: any) {
+    if (
+      error instanceof TypeError &&
+      (error.message === "Failed to fetch" ||
+        error.message === "Network request failed")
+    ) {
       throw new Error(
-        "Network error: Unable to connect to server. Please check your connection.",
+        "Network error: Unable to connect. Please check your connection.",
       );
     }
     throw error;
@@ -883,8 +885,11 @@ export const getPromoterAlerts = async (id: string) => {
 /**
  * Get alerts for current user
  * POST /myalerts
+ * Retries once on network failure (common on physical device in dev).
  */
-export const getMyAlerts = async () => {
+export const getMyAlerts = async (retryCount = 0): Promise<any> => {
+  const maxRetries = 1;
+
   try {
     console.log("[MY ALERTS] 🔍 Getting device token...");
     const deviceToken = await getDeviceToken();
@@ -900,6 +905,7 @@ export const getMyAlerts = async () => {
     );
 
     const myHeaders = new Headers();
+    myHeaders.append("Content-Type", "application/json");
     // Send devicetoken in header (lowercase - server expectation)
     if (deviceToken) {
       myHeaders.append("devicetoken", deviceToken);
@@ -914,20 +920,15 @@ export const getMyAlerts = async () => {
       myHeaders.append("Cookie", sessionCookie);
     }
 
-    console.log(
-      "[MY ALERTS] 📤 Request headers:",
-      Object.fromEntries(myHeaders.entries()),
-    );
-
-    const formdata = new FormData();
-
+    // Use JSON body (FormData can cause "Network request failed" on Android)
     const requestOptions: RequestInit = {
       method: "POST",
       headers: myHeaders,
-      body: formdata,
+      body: JSON.stringify({}),
       redirect: "follow",
     };
 
+    console.log("[MY ALERTS] 🌐 Fetching", `${BASE_URL}/myalerts`);
     const response = await fetch(`${BASE_URL}/myalerts`, requestOptions);
 
     if (!response.ok) {
@@ -939,10 +940,24 @@ export const getMyAlerts = async () => {
 
     const parsed = await parseApiResponse(response);
     return mapAlertListResponse(parsed);
-  } catch (error) {
-    if (error instanceof TypeError && error.message === "Failed to fetch") {
+  } catch (error: any) {
+    const isNetworkError =
+      error instanceof TypeError &&
+      (error.message === "Failed to fetch" ||
+        error.message === "Network request failed");
+
+    if (isNetworkError) {
+      console.warn(
+        `[MY ALERTS] ❌ Network error (attempt ${retryCount + 1}/${maxRetries + 1}):`,
+        error?.message ?? error,
+      );
+      if (retryCount < maxRetries) {
+        console.log("[MY ALERTS] 🔄 Retrying in 1.5s...");
+        await new Promise((r) => setTimeout(r, 1500));
+        return getMyAlerts(retryCount + 1);
+      }
       throw new Error(
-        "Network error: Unable to connect to server. Please check your connection.",
+        "Unable to connect. Check your connection and tap Retry.",
       );
     }
     throw error;
@@ -961,6 +976,7 @@ export const getAlertDetails = async (notificationId: string) => {
     const sessionCookie = await getSessionCookie();
 
     const myHeaders = new Headers();
+    myHeaders.append("Content-Type", "application/json");
     // Send devicetoken in header (lowercase - server expectation)
     if (deviceToken) {
       myHeaders.append("devicetoken", deviceToken);
@@ -974,12 +990,11 @@ export const getAlertDetails = async (notificationId: string) => {
       console.log("[API] ✅ Session cookie added to headers");
     }
 
-    const formdata = new FormData();
-
+    // Use JSON body (FormData causes "Network request failed" on Android)
     const requestOptions: RequestInit = {
       method: "POST",
       headers: myHeaders,
-      body: formdata,
+      body: JSON.stringify({}),
       redirect: "follow",
     };
 
@@ -1004,11 +1019,15 @@ export const getAlertDetails = async (notificationId: string) => {
     const parsed = await parseApiResponse(response);
     console.log("[API] ✅ Alert details fetched successfully");
     return parsed;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[API] ❌ Error in getAlertDetails:", error);
-    if (error instanceof TypeError && error.message === "Failed to fetch") {
+    if (
+      error instanceof TypeError &&
+      (error.message === "Failed to fetch" ||
+        error.message === "Network request failed")
+    ) {
       throw new Error(
-        "Network error: Unable to connect to server. Please check your connection.",
+        "Network error: Unable to connect. Please check your connection.",
       );
     }
     throw error;
@@ -1025,6 +1044,7 @@ export const markAlertAsRead = async (notificationId: string) => {
     const sessionCookie = await getSessionCookie();
 
     const myHeaders = new Headers();
+    myHeaders.append("Content-Type", "application/json");
     // Send DeviceToken in header (both variations for compatibility)
     if (deviceToken) {
       myHeaders.append("DeviceToken", deviceToken);
@@ -1037,12 +1057,11 @@ export const markAlertAsRead = async (notificationId: string) => {
       myHeaders.append("Cookie", sessionCookie);
     }
 
-    const formdata = new FormData();
-
+    // Use JSON body (FormData causes "Network request failed" on Android)
     const requestOptions: RequestInit = {
       method: "POST",
       headers: myHeaders,
-      body: formdata,
+      body: JSON.stringify({}),
       redirect: "follow",
     };
 
@@ -1060,10 +1079,14 @@ export const markAlertAsRead = async (notificationId: string) => {
 
     // Response shape: { msg: "...", error: false, status: 200 }
     return parseApiResponse(response);
-  } catch (error) {
-    if (error instanceof TypeError && error.message === "Failed to fetch") {
+  } catch (error: any) {
+    if (
+      error instanceof TypeError &&
+      (error.message === "Failed to fetch" ||
+        error.message === "Network request failed")
+    ) {
       throw new Error(
-        "Network error: Unable to connect to server. Please check your connection.",
+        "Network error: Unable to connect. Please check your connection.",
       );
     }
     throw error;
@@ -1476,21 +1499,20 @@ export const deleteEventQuickLink = async (linkId: string) => {
     const sessionCookie = await getSessionCookie();
 
     const myHeaders = new Headers();
-    // Send DeviceToken in header
+    myHeaders.append("Content-Type", "application/json");
     if (deviceToken) {
       myHeaders.append("DeviceToken", deviceToken);
+      myHeaders.append("devicetoken", deviceToken);
     }
-    // Send Cookie in header
     if (sessionCookie) {
       myHeaders.append("Cookie", sessionCookie);
     }
 
-    const formdata = new FormData();
-
+    // Use JSON body (FormData causes "Network request failed" on Android)
     const requestOptions: RequestInit = {
       method: "POST",
       headers: myHeaders,
-      body: formdata,
+      body: JSON.stringify({}),
       redirect: "follow",
     };
 
@@ -1507,10 +1529,14 @@ export const deleteEventQuickLink = async (linkId: string) => {
     }
 
     return parseApiResponse(response);
-  } catch (error) {
-    if (error instanceof TypeError && error.message === "Failed to fetch") {
+  } catch (error: any) {
+    if (
+      error instanceof TypeError &&
+      (error.message === "Failed to fetch" ||
+        error.message === "Network request failed")
+    ) {
       throw new Error(
-        "Network error: Unable to connect to server. Please check your connection.",
+        "Network error: Unable to connect. Please check your connection.",
       );
     }
     throw error;
@@ -1574,21 +1600,20 @@ export const getEventAlerts = async (id: string) => {
     const sessionCookie = await getSessionCookie();
 
     const myHeaders = new Headers();
-    // Send DeviceToken in header
+    myHeaders.append("Content-Type", "application/json");
     if (deviceToken) {
       myHeaders.append("DeviceToken", deviceToken);
+      myHeaders.append("devicetoken", deviceToken);
     }
-    // Send Cookie in header
     if (sessionCookie) {
       myHeaders.append("Cookie", sessionCookie);
     }
 
-    const formdata = new FormData();
-
+    // Use JSON body (FormData causes "Network request failed" on Android)
     const requestOptions: RequestInit = {
       method: "POST",
       headers: myHeaders,
-      body: formdata,
+      body: JSON.stringify({}),
       redirect: "follow",
     };
 
@@ -1606,10 +1631,14 @@ export const getEventAlerts = async (id: string) => {
 
     const parsed = await parseApiResponse(response);
     return mapAlertListResponse(parsed);
-  } catch (error) {
-    if (error instanceof TypeError && error.message === "Failed to fetch") {
+  } catch (error: any) {
+    if (
+      error instanceof TypeError &&
+      (error.message === "Failed to fetch" ||
+        error.message === "Network request failed")
+    ) {
       throw new Error(
-        "Network error: Unable to connect to server. Please check your connection.",
+        "Network error: Unable to connect. Please check your connection.",
       );
     }
     throw error;
