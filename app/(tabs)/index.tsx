@@ -415,7 +415,15 @@ export default function HomeScreen() {
                 address={promoter.address}
                 isSubscribed={promoter.isSubscribed}
                 isAdminOwned={canAccessPromoter(promoter.id)}
-                onPress={() => router.push(`/(tabs)/promoter/${promoter.id}`)}
+                onPress={() =>
+                  router.push({
+                    pathname: `/(tabs)/promoter/${promoter.id}`,
+                    params:
+                      promoter.isSubscribed === 1
+                        ? { subscribed: "1" }
+                        : undefined,
+                  })
+                }
               />
             ))
           ) : (

@@ -51,9 +51,15 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PromoterDetailScreen() {
-  const params = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string; subscribed?: string }>();
   const rawId = params.id;
   const id = typeof rawId === "string" ? rawId : Array.isArray(rawId) ? rawId[0] : undefined;
+  const subscribedParam =
+    typeof params.subscribed === "string"
+      ? params.subscribed
+      : Array.isArray(params.subscribed)
+        ? params.subscribed[0]
+        : undefined;
   const router = useRouter();
 
   const [promoter, setPromoter] = useState<Promoter | undefined>();
@@ -114,12 +120,14 @@ export default function PromoterDetailScreen() {
         throw new Error("No promoter data received from API");
       }
 
-      // Handle isSubscribed - can be string "0"/"1" or boolean
-      const isSubscribedValue = p.isSubscribed;
-      const isSubscribed =
+      // Handle isSubscribed - from API or from route param (when opened from Subscribed list)
+      const isSubscribedValue = p.isSubscribed ?? p.is_subscribed ?? p.subscribed;
+      const apiSubscribed =
         typeof isSubscribedValue === "string"
           ? isSubscribedValue === "1" || isSubscribedValue === "true"
           : Boolean(isSubscribedValue);
+      const isSubscribed =
+        subscribedParam === "1" ? true : apiSubscribed;
 
       // Use the route id as fallback if no ID found in response
       const promoterId = p.id || p._id || p.promoterId || p.venueid || id;
@@ -142,7 +150,7 @@ export default function PromoterDetailScreen() {
           p.venueCover ||
           "",
         eventCount: p.eventCount || p.eventsCount || p.event_count || 0,
-        isSubscribed: isSubscribed,
+        isSubscribed: isSubscribed ? 1 : 0,
         brandColor: p.brandColor || p.brand_color || "#ef4444",
         website: p.website || p.websiteUrl || p.website_url || "",
         latitude: parseFloat(

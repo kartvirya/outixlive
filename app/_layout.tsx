@@ -642,10 +642,9 @@ export default function RootLayout() {
         // Build sections only if they have content
         const sections = [];
 
-        // Notification content section
+        // Notification content section (hide internal NotificationID from user popup)
         const messageContent = [];
-        if (hasValue(notificationId) && notificationId !== "Not found")
-          messageContent.push(`ID: ${notificationId}`);
+        // Keep NotificationID only in console logs, not in the visible popup
         if (hasValue(content.body)) messageContent.push(`${content.body}`);
         if (hasValue(content.subtitle))
           messageContent.push(`${content.subtitle}`);

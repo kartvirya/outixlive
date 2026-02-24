@@ -5,12 +5,18 @@ import { Tabs, useSegments } from "expo-router";
 import { Bell, Calendar, Home, User } from "lucide-react-native";
 import React from "react";
 import { StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import "../../global.css";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { unreadCount } = useNotifications();
   const segments = useSegments();
+  const insets = useSafeAreaInsets();
+
+  // Ensure tab bar sits above Android system navigation (3-button nav)
+  const tabBarBottomPadding = Math.max(insets.bottom, 12);
+  const tabBarHeight = 56 + tabBarBottomPadding;
 
   // Determine which tab should be active based on current route
   const isOnEventPage = segments.includes("event");
@@ -26,9 +32,9 @@ export default function TabLayout() {
           backgroundColor: "rgba(10, 10, 10, 0.95)",
           borderTopWidth: 1,
           borderTopColor: "rgba(255, 255, 255, 0.1)",
-          paddingBottom: 28,
+          paddingBottom: tabBarBottomPadding,
           paddingTop: 8,
-          height: 84,
+          height: tabBarHeight,
         },
         tabBarLabelStyle: {
           fontSize: 11,
