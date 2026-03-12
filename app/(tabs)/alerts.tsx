@@ -12,7 +12,6 @@ import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
-    Pressable,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -27,7 +26,6 @@ export default function AlertsScreen() {
   );
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedNotificationId, setSelectedNotificationId] =
     useState<string>("");
@@ -54,7 +52,6 @@ export default function AlertsScreen() {
       } else {
         setIsLoading(true);
       }
-      setError(null);
       const data = await getMyAlerts();
 
       console.log(
@@ -125,11 +122,8 @@ export default function AlertsScreen() {
       // Refresh the notification badge count after loading
       await refreshNotifications();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load alerts";
-      setError(msg);
-      if (!isRefresh) {
-        Alert.alert("Error", msg);
-      }
+      // Treat fetch errors as empty state (e.g. no subscriptions, network) - show friendly message instead of error
+      setNotificationsList([]);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -211,23 +205,6 @@ export default function AlertsScreen() {
               <ActivityIndicator size="large" color="#22c55e" />
               <Text style={styles.emptyTitle}>Loading alerts...</Text>
             </View>
-          ) : error ? (
-            <View style={styles.emptyState}>
-              <Bell size={40} color="#ef4444" />
-              <Text style={[styles.emptyTitle, styles.errorTitle]}>
-                Could not load alerts
-              </Text>
-              <Text style={styles.emptySubtitle}>{error}</Text>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.retryButton,
-                  pressed && styles.retryButtonPressed,
-                ]}
-                onPress={() => loadAlerts()}
-              >
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </Pressable>
-            </View>
           ) : notificationsList.length > 0 || activeBuybackOffers.length > 0 ? (
             <>
               {activeBuybackOffers.map((offer) => (
@@ -245,7 +222,9 @@ export default function AlertsScreen() {
           ) : (
             <View style={styles.emptyState}>
               <Bell size={40} color="#737373" />
-              <Text style={styles.emptyTitle}>No notifications yet</Text>
+              <Text style={styles.emptyTitle}>
+                You have not subscribed to any events or promoters
+              </Text>
               <Text style={styles.emptySubtitle}>
                 Subscribe to venues to get alerts
               </Text>
@@ -307,24 +286,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#737373",
     marginTop: 4,
-  },
-  errorTitle: {
-    color: "#f87171",
-  },
-  retryButton: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: "#22c55e",
-    borderRadius: 8,
-  },
-  retryButtonPressed: {
-    opacity: 0.8,
-  },
-  retryButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
   },
   badge: {
     marginTop: 8,
