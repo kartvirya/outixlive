@@ -44,32 +44,39 @@ export const CreateNotificationModal = ({
   const [isSending, setIsSending] = useState(false);
 
   const handlePickImage = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        "Permission needed",
-        "Please allow photo library access to upload an image.",
-      );
-      return;
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Permission needed",
+          "Please allow photo library access to upload an image.",
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        quality: 0.9,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const uri = asset.uri;
+      if (!uri || typeof uri !== "string") {
+        return;
+      }
+      const name =
+        asset.fileName || uri.split("/").pop() || `alert-${Date.now()}.jpg`;
+      const type = asset.mimeType || "image/jpeg";
+
+      setNotificationImage({ uri, name, type });
+    } catch (err) {
+      console.warn("[CreateNotification] Image picker error:", err);
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.9,
-    });
-
-    if (result.canceled || !result.assets?.[0]) {
-      return;
-    }
-
-    const asset = result.assets[0];
-    const uri = asset.uri;
-    const name =
-      asset.fileName || uri.split("/").pop() || `alert-${Date.now()}.jpg`;
-    const type = asset.mimeType || "image/jpeg";
-
-    setNotificationImage({ uri, name, type });
   };
 
   const handleRemoveImage = () => {
@@ -165,11 +172,12 @@ export const CreateNotificationModal = ({
             >
               {notificationImage ? "Change Image" : "Upload Image"}
             </Button>
-            {notificationImage ? (
+            {notificationImage?.uri ? (
               <View style={styles.imagePreview}>
                 <Image
                   source={{ uri: notificationImage.uri }}
                   style={styles.previewImage}
+                  resizeMode="cover"
                 />
                 <View style={styles.imageActions}>
                   <Text style={styles.imageName} numberOfLines={1}>

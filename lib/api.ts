@@ -1122,8 +1122,12 @@ export const sendPromoterAlert = async (
     formdata.append("notification_type", notificationType);
     formdata.append("notification_message", notificationMessage);
     formdata.append("notification_icon", notificationIcon);
-    if (notificationImage) {
-      formdata.append("image", notificationImage as any);
+    if (notificationImage?.uri) {
+      formdata.append("image", {
+        uri: String(notificationImage.uri),
+        name: notificationImage.name || `alert-${Date.now()}.jpg`,
+        type: notificationImage.type || "image/jpeg",
+      });
     }
 
     const requestOptions: RequestInit = {
@@ -1677,8 +1681,12 @@ export const sendEventAlert = async (
     formdata.append("notification_message", notificationMessage);
     formdata.append("notification_icon", notificationIcon);
     formdata.append("event", eventId);
-    if (notificationImage) {
-      formdata.append("image", notificationImage as any);
+    if (notificationImage?.uri) {
+      formdata.append("image", {
+        uri: String(notificationImage.uri),
+        name: notificationImage.name || `alert-${Date.now()}.jpg`,
+        type: notificationImage.type || "image/jpeg",
+      });
     }
 
     const requestOptions: RequestInit = {

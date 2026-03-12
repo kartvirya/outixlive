@@ -286,28 +286,35 @@ export default function EventDetailScreen() {
   };
 
   const handlePickAlertImage = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      return;
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        quality: 0.9,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const uri = asset.uri;
+      if (!uri || typeof uri !== "string") {
+        return;
+      }
+      const name =
+        asset.fileName || uri.split("/").pop() || `alert-${Date.now()}.jpg`;
+      const type = asset.mimeType || "image/jpeg";
+
+      setAlertNotificationImage({ uri, name, type });
+    } catch (err) {
+      console.warn("[SendAlert] Image picker error:", err);
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.9,
-    });
-
-    if (result.canceled || !result.assets?.[0]) {
-      return;
-    }
-
-    const asset = result.assets[0];
-    const uri = asset.uri;
-    const name =
-      asset.fileName || uri.split("/").pop() || `alert-${Date.now()}.jpg`;
-    const type = asset.mimeType || "image/jpeg";
-
-    setAlertNotificationImage({ uri, name, type });
   };
 
   const handleRemoveAlertImage = () => {
@@ -1224,10 +1231,11 @@ export default function EventDetailScreen() {
                         </TouchableOpacity>
                       ) : null}
                     </View>
-                    {alertNotificationImage ? (
+                    {alertNotificationImage?.uri ? (
                       <Image
                         source={{ uri: alertNotificationImage.uri }}
                         style={styles.alertImagePreview}
+                        resizeMode="cover"
                       />
                     ) : null}
                   </View>

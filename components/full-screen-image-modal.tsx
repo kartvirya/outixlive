@@ -1,3 +1,4 @@
+import { X } from "lucide-react-native";
 import React from "react";
 import {
   Dimensions,
@@ -5,7 +6,6 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 
@@ -32,18 +32,22 @@ export function FullScreenImageModal({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <View style={styles.overlay}>
         <View style={styles.center}>
-          <Pressable style={styles.imageContainer} onPress={(e) => e.stopPropagation()}>
-            <Image
-              source={{ uri: imageUri }}
-              style={styles.fullImage}
-              resizeMode="contain"
-            />
-          </Pressable>
-          <Text style={styles.hint}>Tap anywhere to close</Text>
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.fullImage}
+            resizeMode="contain"
+          />
         </View>
-      </Pressable>
+        <Pressable
+          style={styles.closeButton}
+          onPress={onClose}
+          hitSlop={16}
+        >
+          <X size={24} color="#fff" />
+        </Pressable>
+      </View>
     </Modal>
   );
 }
@@ -61,19 +65,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  imageContainer: {
-    flex: 1,
-    width: SCREEN_WIDTH,
-    justifyContent: "center",
-  },
   fullImage: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT * 0.85,
   },
-  hint: {
+  closeButton: {
     position: "absolute",
-    bottom: 48,
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 13,
+    top: 48,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
