@@ -24,7 +24,7 @@ export const BuybackSuccessModal = () => {
         </View>
         <Text style={styles.title}>Buyback Confirmed!</Text>
         <Text style={styles.message}>
-          You've successfully bought back into {successInfo.raceName}
+          You have successfully bought back into {successInfo.raceName}
         </Text>
         <View style={styles.details}>
           <View style={styles.detailRow}>

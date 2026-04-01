@@ -4,7 +4,8 @@ import { BuybackSuccessModal } from "@/components/buyback-success-modal";
 import { NotificationDetailModal } from "@/components/notification-detail-modal";
 import { AdminProvider } from "@/contexts/AdminContext";
 import { BuybackProvider } from "@/contexts/BuybackContext";
-import { NotificationProvider } from "@/contexts/NotificationContext";
+import { NotificationProvider, useNotifications } from "@/contexts/NotificationContext";
+import { AuthProvider } from "@/hooks/useAuth";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { verifyConfiguration } from "@/lib/verifyConfig";
@@ -44,6 +45,22 @@ const customDarkTheme = {
 };
 
 export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <AdminProvider>
+          <BuybackProvider>
+            <NotificationProvider>
+              <RootLayoutInner />
+            </NotificationProvider>
+          </BuybackProvider>
+        </AdminProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+function RootLayoutInner() {
   // Use segments to detect when navigation is ready
   const segments = useSegments();
   const [isNavigationReady, setIsNavigationReady] = useState(false);
@@ -54,6 +71,9 @@ export default function RootLayout() {
 
   // Initialize location permissions
   const { requestPermission } = useLocationPermission();
+
+  // Alerts are loaded once via NotificationContext (used for notification fallback matching).
+  const { alerts, refreshNotifications } = useNotifications();
 
   // State for notification modal
   const [isNotificationModalVisible, setIsNotificationModalVisible] =
@@ -243,37 +263,20 @@ export default function RootLayout() {
       console.log("[NOTIFICATION] 📋 Message:", notificationMessage);
 
       if (notificationType || notificationMessage) {
-        console.log("[NOTIFICATION] 🔎 Fetching all alerts to find match...");
+        console.log(
+          "[NOTIFICATION] 🔎 Matching against NotificationContext alerts...",
+        );
 
         try {
-          // Import getMyAlerts at the top of the file
-          const { getMyAlerts } = await import("@/lib/api");
-          const alertsResponse = await getMyAlerts();
+          if (!alerts?.length) {
+            await refreshNotifications();
+          }
 
-          // Extract alerts from response
-          const alerts = Array.isArray(alertsResponse)
-            ? alertsResponse
-            : alertsResponse?.msg || alertsResponse?.alerts || [];
-
-          console.log("[NOTIFICATION] 📦 Found", alerts.length, "total alerts");
-
-          // Find matching alert by notification_type and notification_message
           const matchingAlert = alerts.find((alert: any) => {
             const typeMatch = alert.notification_type === notificationType;
             const messageMatch =
               alert.notification_message === notificationMessage ||
               alert.notification === notificationMessage;
-
-            console.log(
-              "[NOTIFICATION] 🔍 Checking alert:",
-              alert.NotificationID,
-            );
-            console.log(
-              "[NOTIFICATION]   Type match:",
-              typeMatch,
-              `(${alert.notification_type} === ${notificationType})`,
-            );
-            console.log("[NOTIFICATION]   Message match:", messageMatch);
 
             return typeMatch && messageMatch;
           });
@@ -304,7 +307,10 @@ export default function RootLayout() {
             );
           }
         } catch (error) {
-          console.error("[NOTIFICATION] ❌ Error fetching alerts:", error);
+          console.error(
+            "[NOTIFICATION] ❌ Error matching alerts from context:",
+            error,
+          );
         }
       } else {
         console.warn(
@@ -323,7 +329,7 @@ export default function RootLayout() {
         );
       }
     },
-    [extractNotificationId], // Removed openNotificationModal dependency
+    [extractNotificationId, alerts, refreshNotifications], // Context-backed matching
   );
 
   // Expose handleNotificationData globally for testing (ALWAYS - needed for test button)
@@ -519,10 +525,10 @@ export default function RootLayout() {
     if (nativePushToken) {
       console.log("📱 Native Push Token (APNs/FCM):", nativePushToken);
     }
-    if (devicePushToken) {
+    if (devicePushToken?.data) {
       console.log(
         "🔔 Device Push Token:",
-        devicePushToken.data.substring(0, 50) + "...",
+        (devicePushToken.data?.substring(0, 50) || "") + "...",
       );
       console.log("📱 Platform:", devicePushToken.type);
     }
@@ -678,32 +684,24 @@ export default function RootLayout() {
   }, [isReadyForNotifications, handleNotificationData]);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <AdminProvider>
-        <BuybackProvider>
-          <NotificationProvider>
-            <ThemeProvider value={customDarkTheme}>
-              <Stack>
-                <Stack.Screen name="index" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              </Stack>
-              <BuybackNotification />
-              <BuybackSuccessModal />
-              <AddPaymentPrompt />
-              <NotificationDetailModal
-                visible={isNotificationModalVisible}
-                notificationId={selectedNotificationId || ""}
-                onClose={() => {
-                  console.log("[NOTIFICATION] 🔽 Modal closed");
-                  setIsNotificationModalVisible(false);
-                  setSelectedNotificationId(null);
-                }}
-              />
-              <StatusBar style="light" />
-            </ThemeProvider>
-          </NotificationProvider>
-        </BuybackProvider>
-      </AdminProvider>
-    </GestureHandlerRootView>
+    <ThemeProvider value={customDarkTheme}>
+      <Stack>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      </Stack>
+      <BuybackNotification />
+      <BuybackSuccessModal />
+      <AddPaymentPrompt />
+      <NotificationDetailModal
+        visible={isNotificationModalVisible}
+        notificationId={selectedNotificationId || ""}
+        onClose={() => {
+          console.log("[NOTIFICATION] 🔽 Modal closed");
+          setIsNotificationModalVisible(false);
+          setSelectedNotificationId(null);
+        }}
+      />
+      <StatusBar style="light" />
+    </ThemeProvider>
   );
 }

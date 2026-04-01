@@ -5,14 +5,15 @@ import { AnimatedPressable } from "@/components/ui/animated-pressable";
 import { Button } from "@/components/ui/button";
 import { useAdmin } from "@/contexts/AdminContext";
 import { useBuyback } from "@/contexts/BuybackContext";
-import type { Notification, Promoter } from "@/data/mockData";
-import { getMyAlerts, getPromoters } from "@/lib/api";
+import type { Promoter } from "@/data/mockData";
+import { getPromoters } from "@/lib/api";
 import {
   distanceKm,
   getBrowserLocation,
   isValidLatLng,
   type LatLng,
 } from "@/lib/utils";
+import { useNotifications } from "@/contexts/NotificationContext";
 import { useRouter } from "expo-router";
 import {
   Bell,
@@ -34,6 +35,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+// Module-level guard to prevent duplicate API calls when Expo Router mounts
+// the same tab screen more than once.
+let promotersCache: Promoter[] | null = null;
+let promotersFetchInFlight: Promise<Promoter[]> | null = null;
+
 export default function HomeScreen() {
   const router = useRouter();
   const { canAccessPromoter } = useAdmin();
@@ -47,72 +53,33 @@ export default function HomeScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
   const { offers } = useBuyback();
-
-  // Calculate unread notification count from real data
-  const unreadCount = notifications.filter(
-    (n: Notification) => !n.isRead,
-  ).length;
-  const activeBuybackOffers = offers.filter((o) => {
-    if (o.status === "pending") return true;
-    return Date.now() - o.createdAt.getTime() < 24 * 60 * 60 * 1000;
-  });
-  const totalUnread =
-    unreadCount +
-    activeBuybackOffers.filter((o) => o.status === "pending").length;
+  const { refreshNotifications } = useNotifications();
 
   useEffect(() => {
     loadPromoters();
-    loadNotifications();
   }, []);
-
-  const loadNotifications = async () => {
-    try {
-      const data = await getMyAlerts();
-
-      // Extract alerts from API response
-      const alertsList = Array.isArray(data)
-        ? data
-        : data?.msg || data?.alerts || data?.notifications || [];
-
-      if (Array.isArray(alertsList)) {
-        // Transform API alerts to match Notification interface
-        const transformed: Notification[] = alertsList
-          .filter((a: any) => a)
-          .map((a: any) => {
-            const openedValue = a.opened;
-            const isRead =
-              typeof openedValue === "string"
-                ? openedValue === "1" || openedValue.toLowerCase() === "true"
-                : Boolean(openedValue);
-
-            return {
-              id: a.id || a._id || String(Math.random()),
-              title: a.title || a.Title || "Notification",
-              message: a.message || a.Message || "",
-              time: a.time || a.PushedDate || "",
-              type: a.type || "info",
-              eventName: a.eventName || a.EventName,
-              eventId: a.eventId || a.EventId,
-              venueId: a.venueId || a.VenueId,
-              userId: a.userId || a.UserId,
-              isRead: isRead,
-            };
-          });
-
-        setNotifications(transformed);
-      } else {
-        setNotifications([]);
-      }
-    } catch (error) {
-      console.error("Error loading notifications:", error);
-      setNotifications([]);
-    }
-  };
 
   const loadPromoters = async (isRefresh = false) => {
     try {
+      // Explicit refresh: bypass cache and force a new request.
+      if (isRefresh) {
+        promotersCache = null;
+        promotersFetchInFlight = null;
+      }
+
+      // Use cached data if available and not refreshing.
+      if (!isRefresh && promotersCache) {
+        setPromotersList(promotersCache);
+        return;
+      }
+
+      // Share in-flight promise across potential duplicate mounts.
+      if (!isRefresh && promotersFetchInFlight) {
+        setPromotersList(await promotersFetchInFlight);
+        return;
+      }
+
       if (isRefresh) {
         setIsRefreshing(true);
       } else {
@@ -120,58 +87,68 @@ export default function HomeScreen() {
       }
       setError(null);
 
-      const data = await getPromoters();
+      // Start (or reuse) the fetch so duplicate mounts don't call the API twice.
+      promotersFetchInFlight =
+        promotersFetchInFlight ??
+        (async () => {
+          const data = await getPromoters();
 
-      // Transform API response to match Promoter interface
-      // API likely returns data in 'msg' property (similar to events)
-      const promoters = Array.isArray(data)
-        ? data
-        : data?.msg || data?.promoters || data?.data || [];
+          // Transform API response to match Promoter interface
+          // API likely returns data in 'msg' property (similar to events)
+          const promoters = Array.isArray(data)
+            ? data
+            : data?.msg || data?.promoters || data?.data || [];
 
-      const transformedPromoters = promoters
-        .filter((p: any) => p) // Filter out null/undefined
-        .map((p: any) => {
-          // Keep raw isSubscribed value (0 or 1) - don't convert to boolean
-          // Convert string "0"/"1" to number 0/1
-          let isSubscribed = p.isSubscribed;
-          if (typeof isSubscribed === "string") {
-            isSubscribed = isSubscribed === "1" ? 1 : 0;
-          } else if (typeof isSubscribed === "number") {
-            isSubscribed = isSubscribed > 0 ? 1 : 0;
-          } else {
-            isSubscribed = 0; // default to 0 for undefined/null
-          }
+          const transformedPromoters = promoters
+            .filter((p: any) => p) // Filter out null/undefined
+            .map((p: any) => {
+              // Keep raw isSubscribed value (0 or 1) - don't convert to boolean
+              // Convert string "0"/"1" to number 0/1
+              let isSubscribed = p.isSubscribed;
+              if (typeof isSubscribed === "string") {
+                isSubscribed = isSubscribed === "1" ? 1 : 0;
+              } else if (typeof isSubscribed === "number") {
+                isSubscribed = isSubscribed > 0 ? 1 : 0;
+              } else {
+                isSubscribed = 0; // default to 0 for undefined/null
+              }
 
-          const transformed = {
-            id:
-              p.id ||
-              p._id ||
-              String(p.promoterId || Math.random().toString(36)),
-            name: p.name || p.promoterName || "Untitled Venue",
-            logo:
-              p.logo ||
-              p.logoUrl ||
-              p.venuelogo ||
-              "https://via.placeholder.com/200",
-            coverImage:
-              p.coverImage ||
-              p.coverImageUrl ||
-              "https://via.placeholder.com/800",
-            eventCount: p.eventCount || p.eventsCount || 0,
-            isSubscribed: isSubscribed,
-            brandColor: p.brandColor || "0 84% 60%",
-            website: p.website || p.websiteUrl || "",
-            latitude: parseFloat(p.latitude || p.lat || "0"),
-            longitude: parseFloat(p.longitude || p.lng || "0"),
-            address: p.address || p.location || "",
-          };
-          return transformed;
-        });
+              return {
+                id:
+                  p.id ||
+                  p._id ||
+                  String(p.promoterId || Math.random().toString(36)),
+                name: p.name || p.promoterName || "Untitled Venue",
+                logo:
+                  p.logo ||
+                  p.logoUrl ||
+                  p.venuelogo ||
+                  "https://via.placeholder.com/200",
+                coverImage:
+                  p.coverImage ||
+                  p.coverImageUrl ||
+                  "https://via.placeholder.com/800",
+                eventCount: p.eventCount || p.eventsCount || 0,
+                isSubscribed,
+                brandColor: p.brandColor || "0 84% 60%",
+                website: p.website || p.websiteUrl || "",
+                latitude: parseFloat(p.latitude || p.lat || "0"),
+                longitude: parseFloat(p.longitude || p.lng || "0"),
+                address: p.address || p.location || "",
+              };
+            });
 
+          return transformedPromoters;
+        })();
+
+      const transformedPromoters = await promotersFetchInFlight;
+      promotersCache = transformedPromoters;
       setPromotersList(transformedPromoters);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load promoters");
     } finally {
+      // Only clear in-flight; keep cache.
+      promotersFetchInFlight = null;
       setIsLoading(false);
       setIsRefreshing(false);
     }
@@ -179,7 +156,7 @@ export default function HomeScreen() {
 
   const onRefresh = () => {
     loadPromoters(true);
-    loadNotifications(); // Also reload notifications on refresh
+    refreshNotifications();
   };
 
   // Debug function to show notification popup

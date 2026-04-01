@@ -4,14 +4,10 @@ import { Header } from "@/components/header";
 import { NotificationDetailModal } from "@/components/notification-detail-modal";
 import { useBuyback } from "@/contexts/BuybackContext";
 import { useNotifications } from "@/contexts/NotificationContext";
-import { type Notification } from "@/data/mockData";
-import { getMyAlerts, markAlertAsRead } from "@/lib/api";
-import { formatRelativeTime } from "@/lib/dateUtils";
 import { Bell } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -21,153 +17,40 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function AlertsScreen() {
-  const [notificationsList, setNotificationsList] = useState<Notification[]>(
-    [],
-  );
-  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedNotificationId, setSelectedNotificationId] =
     useState<string>("");
   const { offers } = useBuyback();
-  const { refreshNotifications } = useNotifications();
+  const {
+    notifications,
+    unreadCount,
+    refreshNotifications,
+    markAsRead,
+    isLoading,
+  } = useNotifications();
 
-  const unreadCount = notificationsList.filter((n) => !n.isRead).length;
   const activeBuybackOffers = offers.filter((o) => {
     if (o.status === "pending") return true;
     return Date.now() - o.createdAt.getTime() < 24 * 60 * 60 * 1000;
   });
-  const totalUnread =
-    unreadCount +
-    activeBuybackOffers.filter((o) => o.status === "pending").length;
 
   useEffect(() => {
-    loadAlerts();
-  }, []);
-
-  const loadAlerts = async (isRefresh = false) => {
-    try {
-      if (isRefresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
-      }
-      const data = await getMyAlerts();
-
-      console.log(
-        "[ALERTS] 📦 Loaded",
-        Array.isArray(data) ? data.length : data?.msg?.length || 0,
-        "alerts",
-      );
-
-      const alerts = Array.isArray(data)
-        ? data
-        : data?.msg || data?.alerts || data?.notifications || [];
-
-      if (!Array.isArray(alerts)) {
-        setNotificationsList([]);
-        return;
-      }
-
-      const transformed: Notification[] = alerts
-        .filter((a: any) => a)
-        .map((a: any) => {
-          // Handle the 'opened' field from API (0 or 1 as string or number)
-          const openedValue = a.opened;
-          const isRead =
-            typeof openedValue === "string"
-              ? openedValue === "1" || openedValue.toLowerCase() === "true"
-              : Boolean(openedValue);
-
-          // Parse and format the PushedDate using timezone-aware utility
-          const pushedDateStr = a.PushedDate || a.pushedDate || "";
-          const timeLabel = formatRelativeTime(pushedDateStr);
-
-          // Map notification_type to our type system
-          const typeRaw = (a.notification_type || "").toString().toLowerCase();
-          let mappedType: Notification["type"] = "alert";
-          if (typeRaw.includes("urgent")) mappedType = "urgent";
-          else if (typeRaw.includes("schedule")) mappedType = "schedule";
-          else if (typeRaw.includes("class") || typeRaw.includes("call"))
-            mappedType = "call";
-          else if (typeRaw.includes("service")) mappedType = "service_request";
-
-          // Get the message, preferring notification_message over notification
-          const messageRaw = a.notification_message || a.notification || "";
-          const message = (messageRaw as string).replace(/\r\n/g, "\n").trim();
-
-          return {
-            id: a.NotificationID || a.id || String(Math.random()),
-            title: a.notification_type || "Alert",
-            message: message || "No message",
-            time: timeLabel,
-            type: mappedType,
-            eventName: a.EventInfo || a.alertinfo || undefined,
-            eventId: a.EventID || a.eventId || undefined,
-            venueId: undefined,
-            userId: undefined,
-            isRead,
-            details: a.alertinfo || undefined,
-            imageUrl:
-              a.image ||
-              a.notification_image ||
-              a.image_url ||
-              a.imageUrl ||
-              undefined,
-          };
-        });
-
-      setNotificationsList(transformed);
-
-      // Refresh the notification badge count after loading
-      await refreshNotifications();
-    } catch (err) {
-      // Treat fetch errors as empty state (e.g. no subscriptions, network) - show friendly message instead of error
-      setNotificationsList([]);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+    // NotificationContext already fetches on app start, but deep-links can arrive early.
+    if (notifications.length === 0) {
+      refreshNotifications();
     }
-  };
+  }, [notifications.length, refreshNotifications]);
 
   const onRefresh = () => {
-    loadAlerts(true);
+    setIsRefreshing(true);
+    refreshNotifications().finally(() => setIsRefreshing(false));
   };
 
   const handleLongPress = (id: string) => {
     console.log("[ALERTS] 🔍 Long-press detected for notification:", id);
     setSelectedNotificationId(id);
     setIsModalVisible(true);
-  };
-
-  const markAsRead = async (id: string) => {
-    console.log("[ALERTS] 📖 Marking notification as read:", id);
-
-    // Optimistic update
-    setNotificationsList((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
-    );
-
-    try {
-      const response = await markAlertAsRead(id);
-      console.log("[ALERTS] 📦 Mark as read response:", response);
-
-      // Small delay to allow backend to update before refreshing
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      // Refresh the notification badge count
-      await refreshNotifications();
-      console.log("[ALERTS] ✅ Marked notification as read:", id);
-    } catch (err) {
-      // Revert on error
-      setNotificationsList((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, isRead: false } : n)),
-      );
-      const msg =
-        err instanceof Error ? err.message : "Failed to mark alert as read";
-      console.error("[ALERTS] ❌ Error marking as read:", err);
-      Alert.alert("Error", msg);
-    }
   };
 
   return (
@@ -181,9 +64,9 @@ export default function AlertsScreen() {
               Event updates & service requests
             </Text>
           </View>
-          {totalUnread > 0 && (
+          {unreadCount > 0 && (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{totalUnread} new</Text>
+              <Text style={styles.badgeText}>{unreadCount} new</Text>
             </View>
           )}
         </View>
@@ -205,12 +88,12 @@ export default function AlertsScreen() {
               <ActivityIndicator size="large" color="#22c55e" />
               <Text style={styles.emptyTitle}>Loading alerts...</Text>
             </View>
-          ) : notificationsList.length > 0 || activeBuybackOffers.length > 0 ? (
+          ) : notifications.length > 0 || activeBuybackOffers.length > 0 ? (
             <>
               {activeBuybackOffers.map((offer) => (
                 <BuybackAlertItem key={offer.id} offer={offer} />
               ))}
-              {notificationsList.map((notification) => (
+              {notifications.map((notification) => (
                 <ExpandableNotificationItem
                   key={notification.id}
                   {...notification}

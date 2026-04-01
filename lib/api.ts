@@ -455,18 +455,24 @@ export const registerToken = async (deviceToken: string) => {
       headers["Authorization"] = `Bearer ${authToken}`;
     }
 
+    const normalizedDeviceToken = deviceToken.trim();
+
     // Add devicetoken header (lowercase - server expectation)
-    headers["devicetoken"] = deviceToken;
+    headers["devicetoken"] = /^[0-9a-f]{64}$/i.test(normalizedDeviceToken)
+      ? normalizedDeviceToken.toLowerCase()
+      : normalizedDeviceToken;
     headers["Content-Type"] = "application/json";
 
     // FCM tokens contain colons - must encode for URL path
-    const url = `${BASE_URL}/registertoken/${encodeURIComponent(deviceToken)}`;
+    const url = `${BASE_URL}/registertoken/${encodeURIComponent(
+      headers["devicetoken"],
+    )}`;
 
     // Use JSON body (FormData can cause "Network request failed" on Android)
     const response = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ deviceToken }),
+      body: JSON.stringify({ deviceToken: headers["devicetoken"] }),
       redirect: "follow",
     });
 
@@ -479,11 +485,16 @@ export const registerToken = async (deviceToken: string) => {
       // Response is not valid JSON
     }
 
-    // Handle "token already exists" case - this is actually success
-    if (
-      response.status === 404 &&
-      responseData?.msg?.includes("already exist")
-    ) {
+    const responseLower = responseText.toLowerCase();
+    const alreadyExists =
+      // Various backend message formats seen in the codebase
+      responseLower.includes("already exist") ||
+      responseLower.includes("already exists") ||
+      responseLower.includes("token may already exist") ||
+      responseLower.includes("already registered");
+
+    // Handle "token already exists" case - treat as success.
+    if (response.status === 404 && alreadyExists) {
       // Token already exists on server - this is OK
       return {
         error: false,

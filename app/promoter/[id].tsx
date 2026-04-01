@@ -17,7 +17,7 @@ import {
 } from "@/lib/api";
 import { formatTime } from "@/lib/dateUtils";
 import { getNotificationIcon, NOTIFICATION_ICONS } from "@/lib/icon-utils";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import {
     ArrowLeft,
@@ -64,6 +64,17 @@ export default function PromoterDetailScreen() {
         : undefined;
   const router = useRouter();
 
+  // Canonicalize duplicate route structure to expo-router's `(tabs)` routes.
+  // Keep hooks unconditionally executed (no early returns) to satisfy `rules-of-hooks`.
+  const shouldRedirect = !!id;
+  const canonicalHref = shouldRedirect
+    ? `/(tabs)/promoter/${id}${
+        subscribedParam
+          ? `?subscribed=${encodeURIComponent(subscribedParam)}`
+          : ""
+      }`
+    : null;
+
   const [promoter, setPromoter] = useState<Promoter | undefined>();
   const [promoterEvents, setPromoterEvents] = useState<Event[]>([]);
   const [promoterAlerts, setPromoterAlerts] = useState<any[]>([]);
@@ -87,6 +98,9 @@ export default function PromoterDetailScreen() {
   >(null);
 
   useEffect(() => {
+    // This file exists only to redirect to the canonical `(tabs)` route.
+    // Prevent any network calls before we redirect.
+    if (!id || shouldRedirect) return;
     loadPromoterDetailsAndEvents();
     loadPromoterAlerts();
   }, [id]);
@@ -415,6 +429,10 @@ export default function PromoterDetailScreen() {
     // Otherwise it's already HSL format
     return brandColor;
   };
+
+  if (canonicalHref) {
+    return <Redirect href={canonicalHref} />;
+  }
 
   if (!id) {
     return (

@@ -1,8 +1,15 @@
 import { BASE_URL } from "@/constants/config";
-import { getDeviceToken } from "@/lib/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Updates from "expo-updates";
-import { useCallback, useEffect, useState } from "react";
+import {
+  createElement,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 export interface User {
   id: string;
@@ -25,42 +32,51 @@ const USER_STORAGE_KEY = "outix_user";
 const TOKEN_STORAGE_KEY = "outix_token";
 const REFRESH_TOKEN_STORAGE_KEY = "outix_refresh_token";
 
-export const useAuth = () => {
+interface AuthContextType extends AuthState {
+  login: (email: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  updateProfile: (updates: Partial<User>) => Promise<boolean>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const useAuthState = () => {
   const [authState, setAuthState] = useState<AuthState>(() => {
     return { user: null, isAuthenticated: false, isLoading: true, error: null };
   });
 
-  // Load user from storage on mount and register iOS native token
+  // Load user from storage on mount.
+  // Token registration is handled centrally by `usePushNotifications` in `app/_layout.tsx`.
   useEffect(() => {
     const loadUser = async () => {
       try {
-        // Get iOS native APNs device token (same token used everywhere)
-        try {
-          const { getDeviceToken } = await import("@/lib/deviceToken");
-          const deviceToken = await getDeviceToken();
-
-          // Register token with server (works without auth)
-          try {
-            const { registerToken } = await import("@/lib/api");
-            await registerToken(deviceToken);
-          } catch (error) {
-            // Don't block app initialization if token registration fails
-          }
-        } catch (error) {
-          // Device token not available yet - will be registered when iOS provides it
-        }
-
         const savedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
         const savedToken = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
 
         if (savedUser && savedToken) {
-          const user = JSON.parse(savedUser);
-          setAuthState({
-            user,
-            isAuthenticated: true,
-            isLoading: false,
-            error: null,
-          });
+          let parsedUser: User | null = null;
+          try {
+            parsedUser = JSON.parse(savedUser) as User;
+          } catch {
+            parsedUser = null;
+          }
+
+          if (parsedUser) {
+            setAuthState({
+              user: parsedUser,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+            });
+          } else {
+            // Clear invalid/corrupted data
+            await AsyncStorage.multiRemove([
+              USER_STORAGE_KEY,
+              TOKEN_STORAGE_KEY,
+              REFRESH_TOKEN_STORAGE_KEY,
+            ]);
+            setAuthState((prev) => ({ ...prev, isLoading: false }));
+          }
         } else {
           // Clear invalid data
           await AsyncStorage.multiRemove([
@@ -197,17 +213,6 @@ export const useAuth = () => {
         isLoading: false,
         error: null,
       });
-
-      // Register device token with server after successful login
-      try {
-        const deviceToken = await getDeviceToken();
-        if (deviceToken) {
-          const { registerToken } = await import("@/lib/api");
-          await registerToken(deviceToken);
-        }
-      } catch (error) {
-        // Don't block login if token registration fails
-      }
 
       // Reload the app to refresh admin controls and all data
       try {
@@ -355,4 +360,18 @@ export const useAuth = () => {
     logout,
     updateProfile,
   };
+};
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const value = useAuthState();
+  // Avoid JSX here: file is `.ts`, not `.tsx`.
+  return createElement(AuthContext.Provider, { value }, children);
+}
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
 };

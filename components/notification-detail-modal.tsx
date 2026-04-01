@@ -1,4 +1,4 @@
-import { getAlertDetails, getMyAlerts, markAlertAsRead } from "@/lib/api";
+import { getAlertDetails } from "@/lib/api";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { FullScreenImageModal } from "./full-screen-image-modal";
 import { ModalComponent } from "./ui/modal";
+import { useNotifications } from "@/contexts/NotificationContext";
 
 interface NotificationData {
   NotificationID: string;
@@ -44,6 +45,7 @@ export const NotificationDetailModal = ({
   const [notificationData, setNotificationData] =
     useState<NotificationData | null>(null);
   const [fullScreenImageUri, setFullScreenImageUri] = useState<string | null>(null);
+  const { alerts, refreshNotifications, markAsRead } = useNotifications();
 
   useEffect(() => {
     if (visible && notificationId) {
@@ -83,20 +85,12 @@ export const NotificationDetailModal = ({
           "[NOTIFICATION-MODAL] 🔄 Trying fallback: fetching all alerts...",
         );
         try {
-          const alertsResponse = await getMyAlerts();
+          // Use NotificationContext alerts (no direct getMyAlerts call).
+          // If context hasn't loaded yet, request a refresh first.
+          if (!alerts?.length) {
+            await refreshNotifications();
+          }
 
-          // Extract alerts from response
-          const alerts = Array.isArray(alertsResponse)
-            ? alertsResponse
-            : alertsResponse?.msg || alertsResponse?.alerts || [];
-
-          console.log(
-            "[NOTIFICATION-MODAL] 📦 Found",
-            alerts.length,
-            "total alerts",
-          );
-
-          // Find matching alert by NotificationID (case-insensitive comparison)
           const matchingAlert = alerts.find((alert: any) => {
             const alertId =
               alert.NotificationID || alert.notificationId || alert.id;
@@ -119,7 +113,9 @@ export const NotificationDetailModal = ({
               EventID: matchingAlert.EventID || matchingAlert.eventId || "",
               PushedDate:
                 matchingAlert.PushedDate || matchingAlert.pushedDate || "",
-              opened: matchingAlert.opened || "0",
+              opened:
+                String(matchingAlert.opened ?? (matchingAlert.isRead ? "1" : "0")) ||
+                "0",
               OpenDate:
                 matchingAlert.OpenDate || matchingAlert.openDate || null,
               notification_type:
@@ -164,7 +160,7 @@ export const NotificationDetailModal = ({
       if (data.opened === "0") {
         console.log("[NOTIFICATION-MODAL] 📖 Marking as read...");
         try {
-          await markAlertAsRead(notificationId);
+          await markAsRead(notificationId);
         } catch (markErr) {
           console.warn(
             "[NOTIFICATION-MODAL] ⚠️ Failed to mark as read:",

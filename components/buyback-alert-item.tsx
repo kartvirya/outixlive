@@ -75,8 +75,8 @@ export const BuybackAlertItem = ({ offer }: BuybackAlertItemProps) => {
           Unlucky! 😔
         </Text>
         <Text style={[styles.message, isExpired && styles.messageExpired]}>
-          You've been eliminated in {offer.eliminationRound}. Would you like to
-          buy back for{" "}
+          You have been eliminated in {offer.eliminationRound}. Would you
+          like to buy back for{" "}
           <Text style={styles.price}>${offer.buybackPrice.toFixed(2)}</Text>?
         </Text>
 

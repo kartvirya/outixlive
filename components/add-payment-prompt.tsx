@@ -37,7 +37,7 @@ export const AddPaymentPrompt = () => {
         </View>
         <Text style={styles.title}>Payment Method Required</Text>
         <Text style={styles.message}>
-          You need to add a payment method to complete the buyback. We'll securely save your card for future purchases.
+          You need to add a payment method to complete the buyback. We will securely save your card for future purchases.
         </Text>
         <View style={styles.actions}>
           <Button

@@ -123,8 +123,8 @@ export const BuybackNotification = () => {
           Unlucky! 😔
         </Text>
         <Text style={[styles.message, isExpired && styles.messageExpired]}>
-          You've been eliminated in {pendingOffer.eliminationRound}. Would you
-          like to buy back for{" "}
+          You have been eliminated in {pendingOffer.eliminationRound}. Would
+          you like to buy back for{" "}
           <Text style={styles.price}>
             ${pendingOffer.buybackPrice.toFixed(2)}
           </Text>

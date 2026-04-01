@@ -1,4 +1,4 @@
-import { getMyAlerts, markAlertAsRead } from "@/lib/api";
+import { useNotifications } from "@/contexts/NotificationContext";
 import { formatFullDateTime } from "@/lib/dateUtils";
 import { getNotificationIcon } from "@/lib/icon-utils";
 import { useRouter } from "expo-router";
@@ -37,55 +37,37 @@ export const NotificationDropdown = ({
 }: NotificationDropdownProps) => {
   const router = useRouter();
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [markingReadIds, setMarkingReadIds] = useState<Set<string>>(new Set());
+
+  const { alerts: contextAlerts, isLoading, markAsRead: contextMarkAsRead } =
+    useNotifications();
+
+  const getAlertId = (alert: Alert) =>
+    (alert as any).NotificationID || alert.id;
 
   useEffect(() => {
     if (visible) {
-      loadRecentAlerts();
+      const mapped: Alert[] = (contextAlerts || [])
+        .slice()
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.PushedDate || 0).getTime() -
+            new Date(a.PushedDate || 0).getTime(),
+        )
+        .slice(0, 5) as any;
+      setAlerts(mapped);
     }
-  }, [visible]);
+  }, [visible, contextAlerts]);
 
-  const loadRecentAlerts = async () => {
-    try {
-      setIsLoading(true);
-      const data = await getMyAlerts();
-
-      // Extract alerts from API response
-      const alertsList = Array.isArray(data)
-        ? data
-        : data?.msg || data?.alerts || data?.data || [];
-
-      if (Array.isArray(alertsList)) {
-        // Get only the most recent 5 alerts
-        const recentAlerts = alertsList
-          .sort(
-            (a, b) =>
-              new Date(b.PushedDate || 0).getTime() -
-              new Date(a.PushedDate || 0).getTime(),
-          )
-          .slice(0, 5);
-        setAlerts(recentAlerts);
-      } else {
-        setAlerts([]);
-      }
-    } catch (error) {
-      console.error("Error loading recent alerts:", error);
-      setAlerts([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const markAsRead = async (notificationId: string) => {
+  const markAsReadLocal = async (notificationId: string) => {
     try {
       setMarkingReadIds((prev) => new Set([...prev, notificationId]));
-      await markAlertAsRead(notificationId);
+      await contextMarkAsRead(notificationId);
 
       // Update local state to mark as read
       setAlerts((prev) =>
         prev.map((alert) =>
-          alert.id === notificationId ? { ...alert, isRead: true } : alert,
+          getAlertId(alert) === notificationId ? { ...alert, isRead: true } : alert,
         ),
       );
 
@@ -125,7 +107,7 @@ export const NotificationDropdown = ({
   const handleAlertPress = async (alert: Alert) => {
     // Mark as read if not already read
     if (!alert.isRead) {
-      await markAsRead(alert.id);
+      await markAsReadLocal(getAlertId(alert));
     }
 
     onClose();
@@ -168,15 +150,16 @@ export const NotificationDropdown = ({
                   style={styles.alertsList}
                   showsVerticalScrollIndicator={false}
                 >
-                  {alerts.map((alert) => {
-                    const isMarkingRead = markingReadIds.has(alert.id);
+                {alerts.map((alert) => {
+                    const isMarkingRead = markingReadIds.has(alertId);
                     const isRead = alert.isRead;
                     const iconNumber = String(alert.notification_icon || "1");
                     const AlertIcon = getNotificationIcon(iconNumber);
+                    const alertId = getAlertId(alert);
 
                     return (
                       <TouchableOpacity
-                        key={alert.id}
+                        key={alertId}
                         style={[
                           styles.alertItem,
                           isRead && styles.alertItemRead,
@@ -250,7 +233,7 @@ export const NotificationDropdown = ({
                 })()}
                 <Text style={styles.emptyTitle}>No notifications</Text>
                 <Text style={styles.emptySubtitle}>
-                  You'll see your recent notifications here
+                  You will see your recent notifications here
                 </Text>
               </View>
             )}

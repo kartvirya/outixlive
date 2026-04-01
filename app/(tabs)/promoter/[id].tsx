@@ -3,6 +3,7 @@ import { EventCard } from "@/components/event-card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectItem } from "@/components/ui/select";
 import { useAdmin } from "@/contexts/AdminContext";
+import { useNotifications } from "@/contexts/NotificationContext";
 import type { Event, Promoter } from "@/data/mockData";
 import {
   getPromoterAlerts,
@@ -52,6 +53,20 @@ import {
 import { FullScreenImageModal } from "@/components/full-screen-image-modal";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+// Prevent duplicate promoter-details/promoter-alerts calls if this tab screen
+// remounts (common in dev / hot reload).
+let promoterDetailsCache = new Map<
+  string,
+  { promoter: Promoter; promoterEvents: Event[] }
+>();
+let promoterDetailsInFlight = new Map<
+  string,
+  Promise<{ promoter: Promoter; promoterEvents: Event[] }>
+>();
+
+let promoterAlertsCache = new Map<string, any[]>();
+let promoterAlertsInFlight = new Map<string, Promise<any[]>>();
+
 export default function PromoterDetailScreen() {
   const params = useLocalSearchParams<{ id: string; subscribed?: string }>();
   const rawId = params.id;
@@ -86,6 +101,8 @@ export default function PromoterDetailScreen() {
     string | null
   >(null);
 
+  const { refreshNotifications } = useNotifications();
+
   useEffect(() => {
     if (!id) return;
     loadPromoterDetailsAndEvents();
@@ -95,174 +112,213 @@ export default function PromoterDetailScreen() {
   const loadPromoterDetailsAndEvents = async () => {
     if (!id) return;
     try {
+      const cacheKey = `${id}::${subscribedParam ?? ""}`;
+
+      // Serve cached data to avoid duplicate API calls.
+      const cached = promoterDetailsCache.get(cacheKey);
+      if (cached) {
+        setPromoter(cached.promoter);
+        setPromoterEvents(cached.promoterEvents);
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+
+      // Reuse in-flight request across duplicate mounts.
+      const inFlight = promoterDetailsInFlight.get(cacheKey);
+      if (inFlight) {
+        const result = await inFlight;
+        setPromoter(result.promoter);
+        setPromoterEvents(result.promoterEvents);
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
-      const data = await getPromoterDetails(id);
 
-      // API now returns: { info: {...promoter details}, msg: [...events] }
-      const promoterInfo = data?.info;
-      const events = data?.msg || [];
+      promoterDetailsInFlight.set(
+        cacheKey,
+        (async () => {
+          const data = await getPromoterDetails(id);
 
-      if (!promoterInfo) {
-        throw new Error("No promoter info received from API");
-      }
+          // API now returns: { info: {...promoter details}, msg: [...events] }
+          const promoterInfo = data?.info;
+          const events = data?.msg || [];
 
-      // Transform promoter info to match Promoter interface
-      let p = promoterInfo;
-
-      // If data is an object with promoter fields directly, use it
-      if (promoterInfo && typeof promoterInfo === "object") {
-        // Check if data has promoter-like fields
-        if (
-          promoterInfo.name ||
-          promoterInfo.promoterName ||
-          promoterInfo.venuename
-        ) {
-          p = promoterInfo;
-        }
-      }
-
-      // More lenient validation - just check if we have some data
-      if (!p || typeof p !== "object") {
-        throw new Error("No promoter data received from API");
-      }
-
-      // Handle isSubscribed - from API or from route param (when opened from Subscribed list)
-      const isSubscribedValue = p.isSubscribed ?? p.is_subscribed ?? p.subscribed;
-      const apiSubscribed =
-        typeof isSubscribedValue === "string"
-          ? isSubscribedValue === "1" || isSubscribedValue === "true"
-          : Boolean(isSubscribedValue);
-      // When user opened from "Subscribed" venues list, pass subscribed=1; use it if API didn't return subscribed
-      const isSubscribed =
-        subscribedParam === "1" ? true : apiSubscribed;
-
-      // Use the route id as fallback if no ID found in response
-      const promoterId = p.id || p._id || p.promoterId || p.venueid || id;
-
-      const transformed: Promoter = {
-        id: String(promoterId || id),
-        name: p.name || p.promoterName || p.venuename || p.venue_name || "",
-        logo:
-          p.logo ||
-          p.logoUrl ||
-          p.venuelogo ||
-          p.venue_logo ||
-          p.venueLogo ||
-          "",
-        coverImage:
-          p.coverImage ||
-          p.coverImageUrl ||
-          p.venuecover ||
-          p.venue_cover ||
-          p.venueCover ||
-          "",
-        eventCount: p.eventCount || p.eventsCount || p.event_count || 0,
-        isSubscribed: isSubscribed ? 1 : 0,
-        brandColor: p.brandColor || p.brand_color || "#ef4444",
-        website: p.website || p.websiteUrl || p.website_url || "",
-        latitude: parseFloat(
-          String(
-            p.latitude || p.lat || p.venue_latitude || p.venueLatitude || "0",
-          ),
-        ),
-        longitude: parseFloat(
-          String(
-            p.longitude ||
-              p.lng ||
-              p.venue_longitude ||
-              p.venueLongitude ||
-              "0",
-          ),
-        ),
-        address:
-          p.address ||
-          p.location ||
-          p.venue_address ||
-          p.venueaddress ||
-          p.venueAddress ||
-          "",
-        phone:
-          p.phone ||
-          p.phoneNumber ||
-          p.venue_phone ||
-          p.venuePhone ||
-          p.Phone ||
-          "",
-        email: p.email || p.emailAddress || p.venue_email || p.venueEmail || "",
-      };
-
-      setPromoter(transformed);
-
-      // Transform and set events from the same API call
-      const transformedEvents = events
-        .filter((e: any) => e) // Filter out null/undefined
-        .map((e: any) => {
-          // Convert isSubscribed to number (0 or 1) to match card component expectation
-          let isSubscribed = e.isSubscribed;
-          if (typeof isSubscribed === "string") {
-            isSubscribed = isSubscribed === "1" ? 1 : 0;
-          } else if (typeof isSubscribed === "number") {
-            isSubscribed = isSubscribed > 0 ? 1 : 0;
-          } else if (typeof isSubscribed === "boolean") {
-            isSubscribed = isSubscribed ? 1 : 0;
-          } else {
-            isSubscribed = 0; // default to 0 for undefined/null
+          if (!promoterInfo) {
+            throw new Error("No promoter info received from API");
           }
 
-          // Get original date string for sorting
-          const originalDateStr = e.date || e.eventDate || "";
+          // Transform promoter info to match Promoter interface
+          let p = promoterInfo;
 
-          // Format date from "2026-03-07 10:00:00" to readable format
-          const formatDate = (dateStr: string) => {
-            if (!dateStr) return "Date TBA";
-            try {
-              const date = new Date(dateStr);
-              return date.toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              });
-            } catch {
-              return dateStr;
+          // If data is an object with promoter fields directly, use it
+          if (promoterInfo && typeof promoterInfo === "object") {
+            // Check if data has promoter-like fields
+            if (
+              promoterInfo.name ||
+              promoterInfo.promoterName ||
+              promoterInfo.venuename
+            ) {
+              p = promoterInfo;
             }
+          }
+
+          // More lenient validation - just check if we have some data
+          if (!p || typeof p !== "object") {
+            throw new Error("No promoter data received from API");
+          }
+
+          // Handle isSubscribed - from API or from route param (when opened from Subscribed list)
+          const isSubscribedValue =
+            p.isSubscribed ?? p.is_subscribed ?? p.subscribed;
+          const apiSubscribed =
+            typeof isSubscribedValue === "string"
+              ? isSubscribedValue === "1" || isSubscribedValue === "true"
+              : Boolean(isSubscribedValue);
+          // When user opened from "Subscribed" venues list, pass subscribed=1; use it if API didn't return subscribed
+          const isSubscribed = subscribedParam === "1" ? true : apiSubscribed;
+
+          // Use the route id as fallback if no ID found in response
+          const promoterId =
+            p.id || p._id || p.promoterId || p.venueid || id;
+
+          const transformed: Promoter = {
+            id: String(promoterId || id),
+            name:
+              p.name || p.promoterName || p.venuename || p.venue_name || "",
+            logo:
+              p.logo ||
+              p.logoUrl ||
+              p.venuelogo ||
+              p.venue_logo ||
+              p.venueLogo ||
+              "",
+            coverImage:
+              p.coverImage ||
+              p.coverImageUrl ||
+              p.venuecover ||
+              p.venue_cover ||
+              p.venueCover ||
+              "",
+            eventCount: p.eventCount || p.eventsCount || p.event_count || 0,
+            isSubscribed: isSubscribed ? 1 : 0,
+            brandColor: p.brandColor || p.brand_color || "#ef4444",
+            website: p.website || p.websiteUrl || p.website_url || "",
+            latitude: parseFloat(
+              String(
+                p.latitude ||
+                  p.lat ||
+                  p.venue_latitude ||
+                  p.venueLatitude ||
+                  "0",
+              ),
+            ),
+            longitude: parseFloat(
+              String(
+                p.longitude || p.lng || p.venue_longitude || p.venueLongitude || "0",
+              ),
+            ),
+            address:
+              p.address ||
+              p.location ||
+              p.venue_address ||
+              p.venueaddress ||
+              p.venueAddress ||
+              "",
+            phone:
+              p.phone ||
+              p.phoneNumber ||
+              p.venue_phone ||
+              p.venuePhone ||
+              p.Phone ||
+              "",
+            email:
+              p.email ||
+              p.emailAddress ||
+              p.venue_email ||
+              p.venueEmail ||
+              "",
           };
 
-          return {
-            id: e.id || e._id || String(e.eventId || ""),
-            name: e.name || e.eventName || "",
-            image:
-              e.image ||
-              e.coverImage ||
-              e.imageUrl ||
-              "https://via.placeholder.com/400",
-            date: formatDate(originalDateStr),
-            originalDate: originalDateStr, // Keep original for sorting
-            location: e.address || e.location || e.venue || "Location TBA",
-            isSubscribed: isSubscribed,
-            promoterId: e.promoterId || e.promoter?.id || "",
+          // Transform and set events from the same API call
+          const transformedEvents = events
+            .filter((e: any) => e)
+            .map((e: any) => {
+              // Convert isSubscribed to number (0 or 1)
+              let isSubscribed = e.isSubscribed;
+              if (typeof isSubscribed === "string") {
+                isSubscribed = isSubscribed === "1" ? 1 : 0;
+              } else if (typeof isSubscribed === "number") {
+                isSubscribed = isSubscribed > 0 ? 1 : 0;
+              } else if (typeof isSubscribed === "boolean") {
+                isSubscribed = isSubscribed ? 1 : 0;
+              } else {
+                isSubscribed = 0;
+              }
+
+              const originalDateStr = e.date || e.eventDate || "";
+              const formatDate = (dateStr: string) => {
+                if (!dateStr) return "Date TBA";
+                try {
+                  const date = new Date(dateStr);
+                  return date.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  });
+                } catch {
+                  return dateStr;
+                }
+              };
+
+              return {
+                id: e.id || e._id || String(e.eventId || ""),
+                name: e.name || e.eventName || "",
+                image:
+                  e.image ||
+                  e.coverImage ||
+                  e.imageUrl ||
+                  "https://via.placeholder.com/400",
+                date: formatDate(originalDateStr),
+                originalDate: originalDateStr,
+                location: e.address || e.location || e.venue || "Location TBA",
+                isSubscribed: isSubscribed,
+                promoterId: e.promoterId || e.promoter?.id || "",
+              };
+            });
+
+          const sortedEvents = transformedEvents.sort((a: any, b: any) => {
+            const dateA = a.originalDate
+              ? new Date(a.originalDate).getTime()
+              : 0;
+            const dateB = b.originalDate
+              ? new Date(b.originalDate).getTime()
+              : 0;
+            return dateA - dateB;
+          });
+
+          const limitedEvents = sortedEvents
+            .slice(0, 3)
+            .map(({ originalDate, ...rest }: any) => rest);
+
+          const updatedTransformed = {
+            ...transformed,
+            eventCount: transformedEvents.length,
           };
-        });
 
-      // Sort by original date (upcoming first) and set events
-      const sortedEvents = transformedEvents.sort((a: any, b: any) => {
-        const dateA = a.originalDate ? new Date(a.originalDate).getTime() : 0;
-        const dateB = b.originalDate ? new Date(b.originalDate).getTime() : 0;
-        return dateA - dateB; // Upcoming events first
-      });
+          return { promoter: updatedTransformed as Promoter, promoterEvents: limitedEvents as Event[] };
+        })(),
+      );
 
-      // Remove originalDate before setting state and limit to 3 events
-      const limitedEvents = sortedEvents
-        .slice(0, 3)
-        .map(({ originalDate, ...rest }: any) => rest);
-      setPromoterEvents(limitedEvents);
+      const result = await promoterDetailsInFlight.get(cacheKey)!;
+      promoterDetailsInFlight.delete(cacheKey);
+      promoterDetailsCache.set(cacheKey, result);
 
-      // Update event count based on all events (not limited)
-      const updatedTransformed = {
-        ...transformed,
-        eventCount: transformedEvents.length,
-      };
-      setPromoter(updatedTransformed);
+      setPromoter(result.promoter);
+      setPromoterEvents(result.promoterEvents);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load promoter details",
@@ -272,20 +328,44 @@ export default function PromoterDetailScreen() {
     }
   };
 
-  const loadPromoterAlerts = async () => {
+  const loadPromoterAlerts = async (forceRefresh = false) => {
     if (!id) return;
     try {
-      const data = await getPromoterAlerts(id);
+      const cacheKey = id;
 
-      // Extract alerts from API response
-      // API might return data in 'msg' property or directly as array
-      const alerts = Array.isArray(data)
-        ? data
-        : data?.msg || data?.alerts || data?.data || [];
-
-      if (Array.isArray(alerts)) {
-        setPromoterAlerts(alerts);
+      if (forceRefresh) {
+        promoterAlertsCache.delete(cacheKey);
+        promoterAlertsInFlight.delete(cacheKey);
       }
+
+      const cached = promoterAlertsCache.get(cacheKey);
+      if (!forceRefresh && cached) {
+        setPromoterAlerts(cached);
+        return;
+      }
+
+      if (!forceRefresh && promoterAlertsInFlight.get(cacheKey)) {
+        const alerts = await promoterAlertsInFlight.get(cacheKey)!;
+        setPromoterAlerts(alerts);
+        return;
+      }
+
+      promoterAlertsInFlight.set(
+        cacheKey,
+        (async () => {
+          const data = await getPromoterAlerts(id);
+          const alerts = Array.isArray(data)
+            ? data
+            : data?.msg || data?.alerts || data?.data || [];
+          return Array.isArray(alerts) ? alerts : [];
+        })(),
+      );
+
+      const alerts = await promoterAlertsInFlight.get(cacheKey)!;
+      promoterAlertsInFlight.delete(cacheKey);
+      promoterAlertsCache.set(cacheKey, alerts);
+
+      setPromoterAlerts(alerts);
     } catch (err) {
       // Error loading alerts - silently fail, show empty state
       setPromoterAlerts([]);
@@ -306,8 +386,8 @@ export default function PromoterDetailScreen() {
         alertNotificationIcon,
         alertNotificationImage,
       );
-      // Reload alerts
-      await loadPromoterAlerts();
+      // Reload alerts (force refresh to avoid stale cached results)
+      await loadPromoterAlerts(true);
       // Reset form
       setAlertNotificationType("");
       setAlertNotificationMessage("");
@@ -385,10 +465,12 @@ export default function PromoterDetailScreen() {
         );
         await unsubscribeFromPromoter(id);
         console.log("[PROMOTER SUBSCRIBE] ✅ Successfully unsubscribed");
+        await refreshNotifications();
       } else {
         console.log("[PROMOTER SUBSCRIBE] 📤 Calling subscribeToPromoter API");
         await subscribeToPromoter(id);
         console.log("[PROMOTER SUBSCRIBE] ✅ Successfully subscribed");
+        await refreshNotifications();
       }
 
       console.log(

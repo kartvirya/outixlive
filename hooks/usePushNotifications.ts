@@ -11,11 +11,11 @@ import {
   getDevicePushToken,
   getExpoPushTokenAsync,
   registerForPushNotificationsAsync,
-  registerTokenWithBothServices,
   requestNotificationPermissions,
   setupNotificationListeners,
   initializeIOSDeviceTokenListener,
 } from "@/lib/pushNotifications";
+import { ensureDeviceTokenRegistered } from "@/lib/tokenRegistration";
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 
@@ -140,21 +140,19 @@ export function usePushNotifications(): UsePushNotificationsResult {
           if (devToken || nativeToken || expoToken) {
             try {
               console.log("[PUSH] Step 4: Registering with services...");
-              const registrationResult = await registerTokenWithBothServices();
-
-              if (registrationResult.success) {
+              // Register exactly once using the authoritative device token.
+              const tokenReg = await ensureDeviceTokenRegistered();
+              if (!tokenReg.skipped) {
                 console.log(
-                  "[PUSH] ✅ Setup complete! Device registered with services",
+                  "[PUSH] ✅ Device token registered with backend successfully",
                 );
-                if (registrationResult.primaryEndpoint) {
-                  console.log("[PUSH] 🎯 Primary endpoint: AWS SNS");
-                } else {
-                  console.log("[PUSH] 🎯 Primary endpoint: Backend");
-                }
-              } else {
+              } else if (tokenReg.error) {
                 console.warn(
-                  "[PUSH] ⚠️ All registration methods failed, but continuing...",
+                  "[PUSH] ⚠️ Device token registration skipped due to error:",
+                  tokenReg.error,
                 );
+              } else {
+                console.log("[PUSH] ✅ Device token already registered, skipping");
               }
             } catch (backendError) {
               console.error("[PUSH] ❌ Registration failed:", backendError);

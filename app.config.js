@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "Outix Live",
     slug: "OutixRacer",
-    version: "1.0.0",
+    version: "1.0.7",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "outixracer",
@@ -12,18 +12,22 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.live.outix",
+      buildNumber: "9",
       config: {
         usesNonExemptEncryption: false,
       },
       infoPlist: {
-        UIBackgroundModes: ["remote-notification", "background-processing"],
+        // Apple validates UIBackgroundModes values; `processing` is the correct value
+        // for background processing activities (not `background-processing`).
+        // For APNs, `remote-notification` is sufficient. Keeping `processing`
+        // requires `BGTaskSchedulerPermittedIdentifiers` (which we don't use).
+        UIBackgroundModes: ["remote-notification"],
       },
     },
 
     android: {
       package: "com.live.outix",
       useNextNotificationsApi: true,
-      // Required for Firebase/FCM. Download from Firebase Console → Project Settings → Your apps → Android
       googleServicesFile: "./google-services.json",
       adaptiveIcon: {
         backgroundColor: "#000000",
@@ -42,11 +46,11 @@ export default {
     },
 
     plugins: [
-      "@react-native-firebase/app",
       "expo-router",
       "./plugins/withNotifeeAndroidFix",
       "./plugins/withGradleNetworkTimeout",
       "./plugins/withReleaseSigning",
+      "./plugins/withFirebaseModularHeaders",
       [
         "expo-build-properties",
         {
@@ -84,20 +88,16 @@ export default {
       reactCompiler: true,
     },
 
-    // Environment variables - accessible via Constants.expoConfig.extra
     extra: {
-      // EAS Project Configuration
       eas: {
         projectId: "266177d4-b4cf-4862-a6da-6a92a3f92244",
       },
       baseUrl: "https://outix.co/apis",
-      // AWS SNS Configuration
       aws: {
         region: "eu-north-1",
         snsTopicArn:
           "arn:aws:sns:eu-north-1:828043587172:outixracer-notifications",
       },
-      // Apple Developer Configuration (for APNs)
       apple: {
         teamId: "3LJ9R88GGY",
         keyId: "7A2V4W92WK",

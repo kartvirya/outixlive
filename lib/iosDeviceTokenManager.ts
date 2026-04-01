@@ -62,6 +62,7 @@ class IOSDeviceTokenManager {
     );
 
     // If we already have a token, call the callback immediately
+    const hasExistingFallbackToken = !!this.fallbackToken;
     if (this.fallbackToken) {
       console.log("[iOS Token Manager] ✅ Using existing token");
       setTimeout(() => callback(this.fallbackToken!), 100);
@@ -96,14 +97,28 @@ class IOSDeviceTokenManager {
         console.warn(
           "[iOS Token Manager] ⚠️ Native DeviceTokenBridge not available, using fallback polling",
         );
-        this.setupFallbackPolling(callback);
+        // If we already have a token (from storage), there's no point polling.
+        if (!hasExistingFallbackToken) {
+          this.setupFallbackPolling(callback);
+        } else {
+          console.log(
+            "[iOS Token Manager] ℹ️ Skipping fallback polling (token already available from storage)",
+          );
+        }
       }
     } catch (error) {
       console.warn(
         "[iOS Token Manager] ⚠️ Could not set up native bridge, using fallback:",
         error,
       );
-      this.setupFallbackPolling(callback);
+      // If token is already available, avoid starting a redundant polling loop.
+      if (!hasExistingFallbackToken) {
+        this.setupFallbackPolling(callback);
+      } else {
+        console.log(
+          "[iOS Token Manager] ℹ️ Skipping fallback polling (token already available from storage)",
+        );
+      }
     }
 
     // Return cleanup function
@@ -117,10 +132,28 @@ class IOSDeviceTokenManager {
       "[iOS Token Manager] 🔄 Setting up fallback polling for device token...",
     );
 
+    // If we already have a token, no need to poll (avoid wasting CPU and logs).
+    if (this.fallbackToken) {
+      console.log(
+        "[iOS Token Manager] ℹ️ Fallback token already set; not starting polling loop",
+      );
+      return;
+    }
+
     // Poll for token in storage every 2 seconds
     const pollInterval = setInterval(async () => {
       try {
         const storedToken = await this.getStoredDeviceToken();
+        if (!storedToken) {
+          return;
+        }
+
+        // If stored token equals fallbackToken, we can stop polling (token already known).
+        if (storedToken === this.fallbackToken) {
+          clearInterval(pollInterval);
+          return;
+        }
+
         if (storedToken && storedToken !== this.fallbackToken) {
           console.log(
             "[iOS Token Manager] ✅ Device token found via polling:",

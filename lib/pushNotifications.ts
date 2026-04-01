@@ -34,6 +34,7 @@ import {
   startListeningForDeviceToken,
   storeDeviceToken,
 } from "./iosDeviceTokenManager";
+import { ensureDeviceTokenRegistered } from "./tokenRegistration";
 
 // NOTE: Notification handler is now configured in app/_layout.tsx at module level
 // This ensures it's set up BEFORE any components mount (critical for production)
@@ -709,39 +710,26 @@ export function initializeIOSDeviceTokenListener() {
     // Store the token
     await storeDeviceToken(deviceToken);
 
-    // Automatically register with SNS endpoint
     try {
-      console.log("[iOS INTEGRATION] ☁️ Auto-registering with SNS endpoint...");
-      const snsResult = await registerDeviceTokenWithSNSEndpoint(deviceToken);
-
-      if (snsResult?.success) {
+      console.log("[iOS INTEGRATION] ☁️ Registering device token (once)...");
+      const reg = await ensureDeviceTokenRegistered(deviceToken);
+      if (!reg.skipped) {
         console.log(
-          "[iOS INTEGRATION] ✅ Auto-registration with SNS successful!",
+          "[iOS INTEGRATION] ✅ Device token registered successfully",
         );
-        if (snsResult.endpointArn) {
-          console.log(
-            `[iOS INTEGRATION] 🎯 SNS Endpoint ARN: ${snsResult.endpointArn}`,
-          );
-        }
+      } else if (reg.error) {
+        console.warn(
+          "[iOS INTEGRATION] ⚠️ Device token registration skipped/error:",
+          reg.error,
+        );
       } else {
-        console.error(
-          `[iOS INTEGRATION] ❌ Auto-registration with SNS failed: ${snsResult?.error}`,
+        console.log(
+          "[iOS INTEGRATION] ✅ Device token already registered, skipping",
         );
       }
     } catch (error) {
       console.error(
-        "[iOS INTEGRATION] ❌ Error during auto-registration:",
-        error,
-      );
-    }
-
-    // Also register with backend
-    try {
-      console.log("[iOS INTEGRATION] 🏢 Auto-registering with backend...");
-      await registerPushTokenWithBackend();
-    } catch (error) {
-      console.error(
-        "[iOS INTEGRATION] ❌ Error during backend registration:",
+        "[iOS INTEGRATION] ❌ Error during device token registration:",
         error,
       );
     }
@@ -1214,8 +1202,9 @@ export async function checkBackendHealth() {
 }
 
 /**
- * Register token with both outix.co/registertoken (SNS) and backend.
- * Backend has /registertoken, not /register-push-token.
+ * Register token for SNS notifications (primary `/registertoken` path).
+ * We intentionally skip the secondary `/register-push-token` attempt to avoid
+ * inconsistent payloads / route 404s.
  */
 export async function registerTokenWithBothServices() {
   try {
@@ -1251,29 +1240,16 @@ export async function registerTokenWithBothServices() {
       }
     }
 
-    // 2. Also try register-push-token (backend may not have it - returns 404)
-    try {
-      results.backend = await registerPushTokenWithBackend();
-      if (results.backend?.success) {
-        console.log("[PUSH SETUP] ✅ Backend registration successful");
-      }
-    } catch (error) {
-      console.error("[PUSH SETUP] ⚠️ Backend registration failed:", error);
-    }
-
-    const hasAnySuccess =
-      !!results.sns ||
-      results.backend?.success ||
-      (results.backend && results.backend.error === false);
+    // 2. Intentionally skip the secondary register-push-token call.
+    // The backend may not implement this route and it can create inconsistent token payloads.
+    const hasAnySuccess = !!results.sns;
 
     console.log("[PUSH SETUP] ═══════════════════════════════════════");
     console.log("[PUSH SETUP] 📊 Registration Summary:");
     console.log(
       `  • SNS (outix.co/registertoken): ${results.sns ? "✅" : "❌"}`,
     );
-    console.log(
-      `  • Backend (register-push-token): ${results.backend?.success || results.backend?.error === false ? "✅" : "❌"}`,
-    );
+    console.log(`  • Backend (register-push-token): skipped`);
     console.log(`  • Overall: ${hasAnySuccess ? "✅" : "❌"}`);
 
     if (!hasAnySuccess) {
@@ -1281,11 +1257,6 @@ export async function registerTokenWithBothServices() {
       if (!results.sns) {
         console.log(
           "  → SNS: Look for [SNS Registration] - fetch failed? HTTP error?",
-        );
-      }
-      if (!results.backend?.success && results.backend?.error !== false) {
-        console.log(
-          "  → Backend: Look for [BACKEND-REGISTER] - 404 is OK (route not implemented)",
         );
       }
     }

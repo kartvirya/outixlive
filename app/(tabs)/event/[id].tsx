@@ -2,6 +2,7 @@ import { AdminControls } from "@/components/admin-controls";
 import { Button } from "@/components/ui/button";
 import { Select, SelectItem } from "@/components/ui/select";
 import { useAdmin } from "@/contexts/AdminContext";
+import { useNotifications } from "@/contexts/NotificationContext";
 import type { Event } from "@/data/mockData";
 import {
     addEventQuickLink,
@@ -143,6 +144,7 @@ export default function EventDetailScreen() {
   >([]);
   const [eventAlerts, setEventAlerts] = useState<any[]>([]);
   const { isAdmin, canAccessEvent } = useAdmin();
+  const { refreshNotifications } = useNotifications();
   const [showAddLinkModal, setShowAddLinkModal] = useState(false);
   const [newLinkLabel, setNewLinkLabel] = useState("");
   const [newLinkUrl, setNewLinkUrl] = useState("");
@@ -464,8 +466,10 @@ export default function EventDetailScreen() {
 
       if (wasSubscribed === 1) {
         await unsubscribeFromEvent(id);
+        await refreshNotifications();
       } else {
         await subscribeToEvent(id);
+        await refreshNotifications();
       }
     } catch {
       setEvent((prev) => {
@@ -798,7 +802,7 @@ export default function EventDetailScreen() {
                 ]}
                 onPress={() =>
                   event.promoterId &&
-                  router.push(`/promoter/${event.promoterId}`)
+                  router.push(`/(tabs)/promoter/${event.promoterId}`)
                 }
               >
                 <Globe size={20} color={getThemeColor()} />

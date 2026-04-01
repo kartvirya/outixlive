@@ -19,7 +19,7 @@ import {
 } from "@/lib/api";
 import { formatTime } from "@/lib/dateUtils";
 import { getNotificationIcon, NOTIFICATION_ICONS } from "@/lib/icon-utils";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import {
     AlertTriangle,
@@ -118,6 +118,10 @@ export default function EventDetailScreen() {
   const eventData = params.eventData;
   const router = useRouter();
 
+  // Canonicalize duplicate route structure to expo-router's `(tabs)` routes.
+  // Keep hooks unconditionally executed (no early returns) to satisfy `rules-of-hooks`.
+  const shouldRedirect = !!id;
+
   // Initialize with data passed from list page if available (safe parse to avoid crash)
   let initialEvent: ExtendedEvent | undefined;
   try {
@@ -172,7 +176,9 @@ export default function EventDetailScreen() {
   }, [showAddLinkModal]);
 
   useEffect(() => {
-    if (!id) return;
+    // This file exists only to redirect to the canonical `(tabs)` route.
+    // Prevent any network calls before we redirect.
+    if (!id || shouldRedirect) return;
     loadEventDetails();
     loadQuickLinks();
     loadEventAlerts();
@@ -642,6 +648,10 @@ export default function EventDetailScreen() {
     // Fallback icon
     return Link2;
   };
+
+  if (shouldRedirect && id) {
+    return <Redirect href={`/(tabs)/event/${id}`} />;
+  }
 
   if (!id) {
     return (
